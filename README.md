@@ -98,7 +98,7 @@ Some sims have their own pedal calibration on top (iRacing, for example). Run it
 | Device | Status |
 | --- | --- |
 | Heusinkveld Sim Pedals, first generation (`HE SIM PEDALS`, USB `10C4:8B02`) | Tested |
-| Heusinkveld Sim Handbrake, first generation (Leo Bodnar BU0836-LC, USB `16C0:05B7`) | Detected and read; calibration not yet tested |
+| Heusinkveld Sim Handbrake, first generation (Leo Bodnar BU0836-LC, USB `16C0:05B7`) | Tested |
 | Any other HID game controller with analog axes | Shown with one entry per axis |
 
 Reports for other legacy hardware are welcome: open an issue with the device name and USB ID shown under the header.
