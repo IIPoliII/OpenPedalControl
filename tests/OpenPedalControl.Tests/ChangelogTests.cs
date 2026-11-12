@@ -26,6 +26,7 @@ public class ChangelogTests
         List<ChangelogRelease> releases = Changelog.Load();
         Assert.NotEmpty(releases);
         System.Version running = typeof(Changelog).Assembly.GetName().Version!;
+        if (running.Major == 0 && running.Minor == 0 && running.Build == 0) return; // CI builds of main: 0.0.0-ci.N
         Assert.Contains(releases, r => r.Version == $"{running.Major}.{running.Minor}.{running.Build}");
     }
 }
