@@ -85,9 +85,30 @@ end;
 
 function IsVJoyInstalled: Boolean;
 begin
-#ifdef Preview
-  Result := False; // Preview builds always show the vJoy option.
+#ifdef PreviewNoVJoy
+  Result := False; // Preview of the page a PC without vJoy gets.
 #else
   Result := RegKeyExists(HKLM64, '{#VJoyUninstallKey}') or RegKeyExists(HKLM32, '{#VJoyUninstallKey}');
 #endif
+end;
+
+// When vJoy is already there its task is hidden, so say why instead of leaving the option silently missing.
+procedure InitializeWizard;
+var
+  Note: TNewStaticText;
+  Page: TNewNotebookPage;
+begin
+  if not IsVJoyInstalled then Exit;
+  Page := WizardForm.SelectTasksPage;
+  Note := TNewStaticText.Create(WizardForm);
+  Note.Parent := Page;
+  Note.AutoSize := False;
+  Note.WordWrap := True;
+  Note.Left := WizardForm.TasksList.Left;
+  Note.Width := WizardForm.TasksList.Width;
+  Note.Height := ScaleY(32);
+  Note.Top := Page.Height - Note.Height;
+  Note.Caption := 'vJoy is already installed on this PC, so custom curves are ready to use. ' +
+                  'Nothing to install, and your existing vJoy setup is left as it is.';
+  WizardForm.TasksList.Height := Note.Top - WizardForm.TasksList.Top - ScaleY(8);
 end;
