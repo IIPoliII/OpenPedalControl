@@ -24,8 +24,9 @@ output curves and live bars.
   - **Virtual controller (vJoy)**: fully custom 6-point curve with presets, the app runs in the tray.
 - **Live view** of the raw sensor value and of what a game will receive.
 - **Settings**: start with Windows (hidden in the notification area), which vJoy device to use, updates.
-- **Updates** from GitHub: checked at startup (can be turned off) or by hand, installed in one click. After an
-  update the app comes back in the tray with a notification; the full changelog is under *What's new*.
+- **Updates** from GitHub: checked at startup (can be turned off) or by hand, installed in one click. Each
+  download is checked against the SHA-256 GitHub publishes for the release before it runs. After an update the
+  app comes back in the tray with a notification; the full changelog is under *What's new*.
 - **Raw numbers stay editable**, for those who know their values from DIView.
 - Picks up a calibration that already exists in Windows, and can remove its own again without a trace.
 
@@ -36,9 +37,20 @@ From the [latest release](../../releases/latest):
 - **`OpenPedalControl-Setup-x.y.z.exe`** (recommended): installs the app and, if you leave the box ticked,
   the free [vJoy](https://github.com/BrunnerInnovation/vJoy) driver needed for custom curves. Without vJoy you can
   only use the Windows calibration (one-bend curve). vJoy can also be added later from the app's Settings.
-- **`OpenPedalControl.exe`**: the portable app on its own, nothing to install.
+- **`OpenPedalControl.exe`** (or the `-portable.zip` with the README and license): the portable app on its
+  own, nothing to install.
 
-Windows 10 or 11 (64-bit). The .NET Framework 4.8 it uses is part of Windows.
+Windows 10 or 11 (64-bit). The .NET Framework 4.8 it uses is part of Windows. Coming from v0.1.0? It has no
+update check yet, so download v0.2.0 once by hand; from then on the app updates itself.
+
+## Settings
+
+![OpenPedalControl settings](docs/settings.png)
+
+- **Start with Windows**: the app starts hidden in the notification area. Only needed in vJoy mode.
+- **vJoy device**: *Automatic* takes the first device no other program uses; or pick one of the 16 yourself.
+  *Configure vJoy…* opens vJoy's own tool. Without vJoy, this card offers to install it.
+- **Updates**: check at startup or by hand, install in one click, and *What's new* for the changelog.
 
 ## Output modes
 
@@ -104,10 +116,10 @@ The exe ends up in `src/OpenPedalControl/bin/Release/net48/`. The installer addi
 [Inno Setup 6](https://jrsoftware.org/isinfo.php):
 
 ```
-./installer/build-installer.ps1 -Version 0.2.0
+./installer/build-installer.ps1 -Version 0.3.0
 ```
 
-It downloads the official vJoy installer, checks its SHA-256 and bundles it. Pushing a tag like `v0.2.0` makes
+It downloads the official vJoy installer, checks its SHA-256 and bundles it. Pushing a tag like `v0.3.0` makes
 GitHub Actions build everything and publish a release. Add the release to [CHANGELOG.md](CHANGELOG.md) first: it
 is built into the app and shown as *What's new*.
 
