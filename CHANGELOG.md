@@ -2,6 +2,12 @@
 
 Shown inside the app ("What's new"). Each release is a `## version - date` heading followed by `- ` lines.
 
+## 0.2.1 - 2026-11-12
+
+- Installer: when vJoy is already installed, a note now says so instead of the vJoy option silently missing. Your existing vJoy setup is left as it is.
+- Updates are checked against the SHA-256 checksum GitHub publishes for each release before they are run.
+- The first-generation Heusinkveld handbrake is now tested.
+
 ## 0.2.0 - 2026-11-12
 
 - New output mode: virtual controller (vJoy) with a fully custom 6-point curve and ready-made presets (Progressive, Degressive, S-curve...).
