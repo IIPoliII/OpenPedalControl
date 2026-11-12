@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:OpenPedalControl.ViewModels"
         xmlns:c="clr-namespace:OpenPedalControl.Controls"
-        Title="OpenPedalControl" Width="1160" Height="780" MinWidth="860" MinHeight="640"
+        Title="OpenPedalControl" Width="1180" Height="940" MinWidth="880" MinHeight="680"
         Background="{StaticResource WindowBackground}" Foreground="{StaticResource TextPrimary}" FontSize="13"
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="Assets/app.ico">
 
@@ -15,7 +15,7 @@
         </Style>
 
         <DataTemplate x:Key="ControlCard" DataType="{x:Type vm:ControlViewModel}">
-            <Border Style="{StaticResource Card}" Margin="8" MinWidth="300">
+            <Border Style="{StaticResource Card}" Margin="6" MinWidth="290" MaxWidth="520" Padding="16,14,14,12">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -54,7 +54,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" MinHeight="120"/>
+                                <RowDefinition Height="*" MinHeight="110"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
@@ -98,7 +98,8 @@
                             </Grid>
 
                             <TextBlock Grid.Row="6" Text="OUTPUT CURVE" Style="{StaticResource SectionTitle}"/>
-                            <Grid Grid.Row="7" Style="{StaticResource FieldRow}"
+                            <StackPanel Grid.Row="7" Visibility="{Binding IsWindows, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Style="{StaticResource FieldRow}"
                                   ToolTip="Pedal travel at which the output reaches 50 %. 50 is linear; higher is gentler at the start.">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -107,13 +108,54 @@
                                 <TextBlock Text="Curve midpoint" Style="{StaticResource FieldLabel}"/>
                                 <c:NumberBox Grid.Column="1" AutomationProperties.Name="Curve midpoint" Value="{Binding Midpoint}" Minimum="{Binding MidpointMinimum}" Maximum="{Binding MidpointMaximum}" Suffix="%"/>
                             </Grid>
-                            <Slider Grid.Row="8" Margin="0,4,0,0" Value="{Binding Midpoint}" Minimum="{Binding MidpointMinimum}" Maximum="{Binding MidpointMaximum}"
+                            <Slider Margin="0,4,0,0" Value="{Binding Midpoint}" Minimum="{Binding MidpointMinimum}" Maximum="{Binding MidpointMaximum}"
                                     SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True" TickFrequency="1"
                                     AutomationProperties.Name="Curve: travel at 50 % output"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="7" Visibility="{Binding IsVirtual, Converter={StaticResource BoolToVisibility}}">
+                                <Grid Style="{StaticResource FieldRow}" ToolTip="Start from a ready-made curve, then fine-tune the points below.">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="150"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Curve" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox Grid.Column="1" Height="28" VerticalContentAlignment="Center" AutomationProperties.Name="Curve preset"
+                                              ItemsSource="{Binding PresetOptions}" SelectedItem="{Binding SelectedPreset, Mode=TwoWay}"/>
+                                </Grid>
+                                <TextBlock Text="Output at each point of the travel" Style="{StaticResource Muted}" Margin="0,6,0,2"/>
+                                <ItemsControl ItemsSource="{Binding CurvePoints}" Focusable="False">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="3"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,2,6,2">
+                                                <TextBlock Text="{Binding InputLabel}" Style="{StaticResource Muted}" FontSize="11"/>
+                                                <c:NumberBox Value="{Binding Value}" Minimum="0" Maximum="100" Suffix="%"
+                                                             AutomationProperties.Name="{Binding AccessibleName}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Grid Style="{StaticResource FieldRow}" Margin="0,6,0,0"
+                                      ToolTip="The axis of “vJoy Device” this pedal is sent to. Bind that axis in your sim.">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="100"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="vJoy axis" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox Grid.Column="1" Height="28" VerticalContentAlignment="Center" AutomationProperties.Name="vJoy axis"
+                                              ItemsSource="{Binding VirtualAxisOptions}" SelectedItem="{Binding SelectedVirtualAxis, Mode=TwoWay}"/>
+                                </Grid>
+                            </StackPanel>
 
                             <DockPanel Grid.Row="9" Margin="0,6,0,0">
-                                <TextBlock DockPanel.Dock="Top" Text="{Binding CurveName}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <c:CurveGraph Knee="{Binding Knee}" Input="{Binding Travel}" Output="{Binding OutputLevel}" Stroke="{Binding Accent}"/>
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding CurveName}" Style="{StaticResource Muted}" Margin="0,0,0,4"
+                                           Visibility="{Binding IsWindows, Converter={StaticResource BoolToVisibility}}"/>
+                                <c:CurveGraph Knee="{Binding Knee}" Points="{Binding GraphPoints}" Input="{Binding Travel}" Output="{Binding OutputLevel}" Stroke="{Binding Accent}"/>
                             </DockPanel>
 
                             <StackPanel Grid.Row="10" Margin="0,8,0,0">
@@ -137,10 +179,10 @@
                         </Grid>
 
                         <!-- Live bars -->
-                        <Grid Grid.Column="1" Margin="14,14,0,0">
+                        <Grid Grid.Column="1" Margin="10,14,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="42"/>
-                                <ColumnDefinition Width="42"/>
+                                <ColumnDefinition Width="38"/>
+                                <ColumnDefinition Width="38"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -183,6 +225,10 @@
                               MinWidth="250" Height="30" VerticalContentAlignment="Center" AutomationProperties.Name="Device"/>
                     <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource HeaderButton}" Margin="8,0,0,0"
                             ToolTip="Look for connected controllers again and reload the selected one."/>
+                    <CheckBox IsChecked="{Binding StartWithWindows}" Foreground="White" VerticalAlignment="Center" Margin="18,0,0,0"
+                              ToolTip="Start hidden in the notification area when Windows starts. Only needed for the virtual controller (vJoy); the Windows calibration works with the app closed.">
+                        <TextBlock Text="Start with Windows" Foreground="White"/>
+                    </CheckBox>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -196,8 +242,8 @@
                         ToolTip="Put deadzones and curves back to their defaults. The measured calibration is kept."/>
                 <Button DockPanel.Dock="Left" Content="Remove calibration" Click="OnRemoveCalibrationClick" Style="{StaticResource QuietButton}" Margin="8,0,0,0"
                         IsEnabled="{Binding HasDevice}" ToolTip="Delete this device's calibration from Windows and start over."/>
-                <Button DockPanel.Dock="Right" Content="Save to Windows" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}" MinWidth="150"
-                        ToolTip="Store the calibration in Windows so every game uses it. Nothing is written to the pedals themselves."/>
+                <Button DockPanel.Dock="Right" Content="{Binding SaveText}" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}" MinWidth="150"
+                        ToolTip="Windows calibration: stored in Windows for every game. Virtual controller: kept in OpenPedalControl's profile. Nothing is written to the pedals themselves."/>
                 <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" TextTrimming="CharacterEllipsis"
                            Foreground="{StaticResource TextMuted}" TextAlignment="Right" ToolTip="{Binding Status}"/>
             </DockPanel>
@@ -211,6 +257,53 @@
                 <Hyperlink Command="{Binding OpenGameControllersCommand}" Foreground="{StaticResource AccentBrush}">Open Windows game controllers</Hyperlink>
             </TextBlock>
         </DockPanel>
+
+        <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="24,10,24,0" Padding="18,10"
+                Visibility="{Binding HasDevice, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel>
+                <WrapPanel>
+                    <TextBlock Text="OUTPUT" Style="{StaticResource SectionTitle}" Margin="0,1,18,0"/>
+                    <RadioButton GroupName="OutputMode" IsChecked="{Binding IsWindowsMode}" Margin="0,0,28,0">
+                        <TextBlock><Run FontWeight="SemiBold" Text="Windows calibration"/><Run Foreground="{StaticResource TextMuted}" Text="  works with the app closed, one-bend curve"/></TextBlock>
+                    </RadioButton>
+                    <RadioButton GroupName="OutputMode" IsChecked="{Binding IsVirtualMode}" IsEnabled="{Binding VJoyInstalled}">
+                        <TextBlock><Run FontWeight="SemiBold" Text="Virtual controller (vJoy)"/><Run Foreground="{StaticResource TextMuted}" Text="  custom curve, app runs in the tray"/></TextBlock>
+                    </RadioButton>
+                </WrapPanel>
+                <StackPanel Margin="0,6,0,0">
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Text="{Binding VirtualStatus}" FontWeight="SemiBold"
+                               Visibility="{Binding IsVirtualMode, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding VirtualOk}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Style="{StaticResource Muted}"
+                               Visibility="{Binding IsWindowsMode, Converter={StaticResource BoolToVisibility}}"
+                               Text="Stored in Windows for every game. Nothing needs to run while you drive."/>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0" x:Name="NoVJoyHint">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding VJoyInstalled}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <Run Text="Custom curves need the free vJoy driver."/>
+                        <Hyperlink Click="OnInstallVJoyClick" Foreground="{StaticResource AccentBrush}">Install vJoy</Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+        </Border>
 
         <Grid>
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="16,6,16,10"

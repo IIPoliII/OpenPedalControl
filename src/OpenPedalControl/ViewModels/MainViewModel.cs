@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using OpenPedalControl.DirectInput;
 using OpenPedalControl.Hid;
 using OpenPedalControl.Model;
+using OpenPedalControl.VJoy;
 
 namespace OpenPedalControl.ViewModels;
 
@@ -21,26 +21,38 @@ public sealed class DeviceEntry
 
     public GameController Controller { get; }
     public string Label { get; }
+
+    // Screen readers and UI automation read list items through ToString.
+    public override string ToString() => Label;
 }
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
+    public const string VJoyDownloadUrl = "https://github.com/BrunnerInnovation/vJoy/releases/latest";
+
     private readonly DirectInputService _directInput = new DirectInputService();
+    private readonly VirtualOutput _output = new VirtualOutput();
     private HidDeviceReader? _reader;
     private GameController? _controller;
     private DeviceProfile? _profile;
+    private string _savedSnapshot = "";
     private DeviceEntry? _selectedDevice;
     private bool _updatingDeviceList;
     private bool _isDirty;
+    private bool _vJoyInstalled;
     private string _status = "";
     private string _deviceSummary = "";
+    private string _virtualStatus = "";
+    private bool _virtualOk;
 
     public MainViewModel()
     {
         SaveCommand = new RelayCommand(Save, () => HasDevice && IsDirty);
         ResetCommand = new RelayCommand(ResetTuning, () => HasDevice);
         RefreshCommand = new RelayCommand(() => RefreshDevices(true));
-        OpenGameControllersCommand = new RelayCommand(OpenGameControllers);
+        OpenGameControllersCommand = new RelayCommand(() => Open("control.exe", "joy.cpl"));
+        GetVJoyCommand = new RelayCommand(() => Open(VJoyDownloadUrl, null));
+        _vJoyInstalled = VJoyDevice.IsDriverAvailable;
     }
 
     public ObservableCollection<DeviceEntry> Devices { get; } = new ObservableCollection<DeviceEntry>();
@@ -50,6 +62,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand ResetCommand { get; }
     public RelayCommand RefreshCommand { get; }
     public RelayCommand OpenGameControllersCommand { get; }
+    public RelayCommand GetVJoyCommand { get; }
 
     public DeviceEntry? SelectedDevice
     {
@@ -69,7 +82,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public HidDeviceReader? Reader => _reader;
     public bool HasDevice => _reader != null;
 
-    /// <summary>Some setting differs from what Windows has stored.</summary>
+    /// <summary>Some setting is not saved yet.</summary>
     public bool IsDirty
     {
         get => _isDirty;
@@ -81,6 +94,68 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string Status { get => _status; private set => Set(ref _status, value); }
     public string DeviceSummary { get => _deviceSummary; private set => Set(ref _deviceSummary, value); }
+
+    // --- Output mode --------------------------------------------------------------------------------
+
+    /// <summary>The open device sends to vJoy instead of storing a Windows calibration.</summary>
+    public bool IsVirtualMode
+    {
+        get => _profile?.GetOutputMode() == OutputMode.Virtual;
+        set
+        {
+            if (_profile == null || value == IsVirtualMode) return;
+            _profile.Output = (value ? OutputMode.Virtual : OutputMode.Windows).ToString();
+            foreach (ControlViewModel control in Controls) control.SetOutputMode(value);
+            _output.Rebuild();
+            RaiseModeChanged();
+            UpdateVirtualStatus();
+            UpdateDirty();
+            Status = value
+                ? "Virtual controller selected: the vJoy output is live now. Save to keep it."
+                : "Windows calibration selected. Save to store it in Windows.";
+        }
+    }
+
+    public bool IsWindowsMode
+    {
+        get => !IsVirtualMode;
+        set { if (value) IsVirtualMode = false; }
+    }
+
+    public bool VJoyInstalled { get => _vJoyInstalled; private set => Set(ref _vJoyInstalled, value); }
+
+    /// <summary>One-line state of the vJoy output for the open device.</summary>
+    public string VirtualStatus { get => _virtualStatus; private set => Set(ref _virtualStatus, value); }
+    public bool VirtualOk { get => _virtualOk; private set => Set(ref _virtualOk, value); }
+
+    /// <summary>True while at least one device is being sent to vJoy, so the app has to keep running.</summary>
+    public bool IsFeedingVJoy => _output.State == VirtualOutputState.Active;
+
+    public bool StartWithWindows
+    {
+        get => AutoStart.IsEnabled;
+        set
+        {
+            try
+            {
+                AutoStart.SetEnabled(value);
+            }
+            catch (Exception ex)
+            {
+                Status = "Could not change the Windows startup setting: " + ex.Message;
+            }
+            Raise();
+        }
+    }
+
+    private void RaiseModeChanged()
+    {
+        Raise(nameof(IsVirtualMode));
+        Raise(nameof(IsWindowsMode));
+        Raise(nameof(SaveText));
+    }
+
+    public string SaveText => IsVirtualMode ? "Save" : "Save to Windows";
 
     // --- Devices ------------------------------------------------------------------------------------
 
@@ -97,6 +172,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Status = "Could not list game controllers: " + ex.Message;
             return;
         }
+
+        VJoyInstalled = VJoyDevice.IsDriverAvailable;
+        // The vJoy device itself is a game controller too; never offer to calibrate it.
+        controllers = controllers.Where(c => !IsVJoy(c)).ToList();
+        _output.Sync(controllers);
 
         string? openPath = !reload && _reader != null && !_reader.IsClosed ? _controller?.HidPath : null;
         string? wantedPath = _selectedDevice?.Controller.HidPath;
@@ -117,6 +197,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _selectedDevice = stillOpen;
             Raise(nameof(SelectedDevice));
             _updatingDeviceList = false;
+            UpdateVirtualStatus();
             return;
         }
 
@@ -127,6 +208,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LoadDevice(next);
     }
 
+    private static bool IsVJoy(GameController controller) =>
+        controller.VendorId == 0x1234 && controller.ProductId == 0xBEAD;
+
     private DeviceEntry? Find(string? hidPath) =>
         hidPath == null ? null : Devices.FirstOrDefault(d => string.Equals(d.Controller.HidPath, hidPath, StringComparison.OrdinalIgnoreCase));
 
@@ -136,7 +220,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         string name = entry.Controller.Name.ToUpperInvariant();
         if (name.StartsWith("HE ", StringComparison.Ordinal)) return 3;
         if (name.Contains("PEDAL")) return 2;
-        if (name.Contains("HANDBRAKE")) return 1;
+        if (name.Contains("HANDBRAKE") || name.Contains("BU0836")) return 1;
         return 0;
     }
 
@@ -164,8 +248,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         DeviceProfile? saved = ProfileStore.Load(reader.VendorId, reader.ProductId, reader.Serial);
         bool imported = false;
-        _profile = saved ?? CreateProfile(entry.Controller, reader, out imported);
+        if (saved == null)
+        {
+            _profile = CreateProfile(entry.Controller, reader, out imported);
+            ProfileStore.Adopt(_profile);
+        }
+        else
+        {
+            _profile = saved;
+        }
         _profile.DeviceName = entry.Controller.Name;
+        _savedSnapshot = ProfileStore.Snapshot(_profile);
+        bool isVirtual = IsVirtualMode;
 
         var options = new List<AxisOption> { new AxisOption(null) };
         options.AddRange(reader.Axes.Select(axis => new AxisOption(axis)));
@@ -182,12 +276,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
 
             var control = new ControlViewModel(settings, reader, options);
+            control.SetOutputMode(isVirtual);
             control.SettingsChanged += (_, _) => UpdateDirty();
             control.AxisChanged += OnControlAxisChanged;
+            control.VirtualAxisChanged += OnControlVirtualAxisChanged;
             Controls.Add(control);
         }
 
         RefreshApplied();
+        _output.Rebuild();
+        RaiseModeChanged();
+        UpdateVirtualStatus();
 
         string maker = string.IsNullOrEmpty(reader.Manufacturer) ? "" : reader.Manufacturer + "  ·  ";
         string serial = string.IsNullOrEmpty(reader.Serial) ? "" : "  ·  S/N " + reader.Serial;
@@ -239,9 +338,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _reader = null;
         _controller = null;
         _profile = null;
+        _savedSnapshot = "";
         Controls.Clear();
         DeviceSummary = "";
         IsDirty = false;
+        RaiseModeChanged();
     }
 
     private void NotifyDeviceChanged()
@@ -265,6 +366,40 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         foreach (ControlViewModel control in Controls) control.UpdateLive();
     }
 
+    private void UpdateVirtualStatus()
+    {
+        if (!IsVirtualMode)
+        {
+            VirtualStatus = "";
+            VirtualOk = false;
+            return;
+        }
+
+        bool ok = false;
+        string text;
+        if (!VJoyInstalled) text = "vJoy is not installed.";
+        else if (_output.State == VirtualOutputState.Unavailable) text = _output.Problem;
+        else if (_output.State == VirtualOutputState.Active)
+        {
+            ok = true;
+            text = $"Live on vJoy device {VJoyDevice.DefaultDeviceId}. Bind the vJoy axes in your sim.";
+            if (_output.Problem.Length > 0) text = _output.Problem;
+        }
+        else text = "No pedal is sent to vJoy.";
+
+        VirtualStatus = text;
+        VirtualOk = ok && _output.Problem.Length == 0;
+
+        foreach (ControlViewModel control in Controls)
+        {
+            int usage = control.Settings.VirtualAxis;
+            string name = VJoyDevice.AxisName(usage);
+            if (!ok) control.SetVirtualStatus(false, VJoyInstalled ? "Not sent: " + text : "vJoy is not installed");
+            else if (!_output.HasVirtualAxis(usage)) control.SetVirtualStatus(false, $"vJoy has no {name} axis");
+            else control.SetVirtualStatus(true, $"Live on vJoy axis {name}");
+        }
+    }
+
     // --- Settings -----------------------------------------------------------------------------------
 
     private void OnControlAxisChanged(object? sender, EventArgs e)
@@ -280,6 +415,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
         }
         RefreshApplied();
+        _output.Rebuild();
+        UpdateVirtualStatus();
+    }
+
+    private void OnControlVirtualAxisChanged(object? sender, EventArgs e)
+    {
+        if (sender is not ControlViewModel changed) return;
+
+        // A vJoy axis can only be driven by one control of this device.
+        int usage = changed.Settings.VirtualAxis;
+        if (usage != 0)
+        {
+            foreach (ControlViewModel other in Controls)
+            {
+                if (ReferenceEquals(other, changed) || other.Settings.VirtualAxis != usage) continue;
+                other.Settings.VirtualAxis = 0;
+                other.RefreshVirtualAxis();
+            }
+        }
+        _output.Rebuild();
+        UpdateVirtualStatus();
+        UpdateDirty();
     }
 
     private void RefreshApplied()
@@ -299,22 +456,42 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateDirty();
     }
 
-    private void UpdateDirty() => IsDirty = Controls.Any(c => c.IsAssigned && !c.IsApplied);
+    private void UpdateDirty()
+    {
+        if (_profile == null)
+        {
+            IsDirty = false;
+            return;
+        }
+        bool profileChanged = ProfileStore.Snapshot(_profile) != _savedSnapshot;
+        bool calibrationDiffers = !IsVirtualMode && Controls.Any(c => c.IsAssigned && !c.IsApplied);
+        IsDirty = profileChanged || calibrationDiffers;
+    }
 
-    /// <summary>Writes the calibration of every pedal to Windows and stores the profile.</summary>
+    /// <summary>
+    /// Windows mode: writes the calibration of every pedal to Windows. Both modes: stores the profile.
+    /// </summary>
     public void Save()
     {
         if (_controller == null || _profile == null) return;
         try
         {
-            foreach (ControlViewModel control in Controls)
+            if (!IsVirtualMode)
             {
-                if (control.Axis is HidAxis axis)
-                    _directInput.SetCalibration(_controller.InstanceGuid, axis.UsagePage, axis.Usage, control.Computed);
+                foreach (ControlViewModel control in Controls)
+                {
+                    if (control.Axis is HidAxis axis)
+                        _directInput.SetCalibration(_controller.InstanceGuid, axis.UsagePage, axis.Usage, control.Computed);
+                }
             }
             ProfileStore.Save(_profile);
+            _savedSnapshot = ProfileStore.Snapshot(_profile);
             RefreshApplied();
-            Status = $"Saved to Windows at {DateTime.Now:T}. Restart your sim if it is already running.";
+            _output.Rebuild();
+            UpdateVirtualStatus();
+            Status = IsVirtualMode
+                ? $"Saved at {DateTime.Now:T}. OpenPedalControl keeps sending to vJoy while it runs, also from the tray."
+                : $"Saved to Windows at {DateTime.Now:T}. Restart your sim if it is already running.";
         }
         catch (Exception ex)
         {
@@ -323,10 +500,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Throws away unsaved edits of the open device and reloads it from its saved profile.</summary>
+    public void RevertUnsaved()
+    {
+        if (_reader == null) return;
+        ProfileStore.Forget(_reader.VendorId, _reader.ProductId, _reader.Serial);
+        LoadDevice(_selectedDevice);
+        _output.Rebuild();
+    }
+
     private void ResetTuning()
     {
         foreach (ControlViewModel control in Controls) control.ResetTuning();
-        Status = IsDirty ? "Deadzones and curves reset. Save to Windows to make it permanent." : "Deadzones and curves are at their defaults.";
+        Status = IsDirty ? "Deadzones and curves reset. Save to make it permanent." : "Deadzones and curves are at their defaults.";
     }
 
     public void ApplyWizardResults(IReadOnlyList<WizardResult> results)
@@ -348,8 +534,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 if (control.Axis is HidAxis axis)
                     _directInput.SetCalibration(_controller.InstanceGuid, axis.UsagePage, axis.Usage, DefaultCalibration(axis));
             }
-            string path = ProfileStore.GetPath(_reader.VendorId, _reader.ProductId, _reader.Serial);
-            if (File.Exists(path)) File.Delete(path);
+            ProfileStore.Delete(_reader.VendorId, _reader.ProductId, _reader.Serial);
         }
         catch (Exception ex)
         {
@@ -359,6 +544,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         LoadDevice(entry);
+        _output.Rebuild();
+        UpdateVirtualStatus();
         if (HasDevice) Status = "Calibration removed. Windows uses the raw sensor range again.";
     }
 
@@ -371,15 +558,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return "v" + (build >= 0 ? version.Substring(0, build) : version);
     }
 
-    private void OpenGameControllers()
+    private void Open(string target, string? arguments)
     {
         try
         {
-            Process.Start(new ProcessStartInfo("control.exe", "joy.cpl") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(target, arguments ?? "") { UseShellExecute = true });
         }
         catch (Exception ex)
         {
-            Status = "Could not open the Windows game controller panel: " + ex.Message;
+            Status = "Could not open " + target + ": " + ex.Message;
         }
     }
 
@@ -387,6 +574,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _reader?.Dispose();
         _reader = null;
+        _output.Dispose();
         _directInput.Dispose();
     }
 }

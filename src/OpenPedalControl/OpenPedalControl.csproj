@@ -5,6 +5,8 @@
     <!-- .NET Framework 4.8 ships with every Windows 10/11, so the result is one small portable exe. -->
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- Only for the notification area icon (NotifyIcon). -->
+    <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>OpenPedalControl</RootNamespace>
@@ -19,7 +21,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>OpenPedalControl</Product>
     <Description>Calibration and tuning tool for legacy sim racing pedals and handbrakes.</Description>
     <Copyright>MIT License</Copyright>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Json;
@@ -22,9 +23,60 @@ public static class ProfileStore
         return Path.Combine(ProfileDirectory, name);
     }
 
-    public static DeviceProfile? Load(int vendorId, int productId, string serial) => Read(GetPath(vendorId, productId, serial));
+    private static readonly object CacheLock = new object();
+    private static readonly Dictionary<string, DeviceProfile?> Cache = new Dictionary<string, DeviceProfile?>(StringComparer.OrdinalIgnoreCase);
 
-    public static void Save(DeviceProfile profile) => Write(profile, GetPath(profile.VendorId, profile.ProductId, profile.Serial));
+    /// <summary>
+    /// The profile of a device, read from disk once. The same object is handed to the window and to the
+    /// virtual output, so edits take effect live.
+    /// </summary>
+    public static DeviceProfile? Load(int vendorId, int productId, string serial)
+    {
+        string path = GetPath(vendorId, productId, serial);
+        lock (CacheLock)
+        {
+            if (!Cache.TryGetValue(path, out DeviceProfile? profile))
+            {
+                profile = Read(path);
+                Cache[path] = profile;
+            }
+            return profile;
+        }
+    }
+
+    /// <summary>Makes a newly created profile the shared one for its device (not yet saved).</summary>
+    public static void Adopt(DeviceProfile profile)
+    {
+        lock (CacheLock) Cache[GetPath(profile.VendorId, profile.ProductId, profile.Serial)] = profile;
+    }
+
+    /// <summary>Drops unsaved edits: the next Load reads the file again.</summary>
+    public static void Forget(int vendorId, int productId, string serial)
+    {
+        lock (CacheLock) Cache.Remove(GetPath(vendorId, productId, serial));
+    }
+
+    public static void Save(DeviceProfile profile)
+    {
+        Write(profile, GetPath(profile.VendorId, profile.ProductId, profile.Serial));
+        Adopt(profile);
+    }
+
+    /// <summary>Deletes the file and drops the cached profile.</summary>
+    public static void Delete(int vendorId, int productId, string serial)
+    {
+        string path = GetPath(vendorId, productId, serial);
+        if (File.Exists(path)) File.Delete(path);
+        lock (CacheLock) Cache.Remove(path);
+    }
+
+    /// <summary>The profile as JSON text, used to tell whether something changed since the last save.</summary>
+    public static string Snapshot(DeviceProfile profile)
+    {
+        using var stream = new MemoryStream();
+        new DataContractJsonSerializer(typeof(DeviceProfile)).WriteObject(stream, profile);
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
 
     /// <summary>Reads a profile file. A missing or damaged file gives null.</summary>
     public static DeviceProfile? Read(string path)

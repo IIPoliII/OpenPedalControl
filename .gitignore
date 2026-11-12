@@ -5,3 +5,5 @@ TestResults/
 .vs/
 *.user
 *.suo
+installer/staging/
+installer/output/

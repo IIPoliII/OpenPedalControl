@@ -67,6 +67,20 @@ public static class CalibrationMath
     }
 
     /// <summary>
+    /// Position within the active range in pedal direction: 0 at the released edge, 1 at the pressed edge
+    /// (deadzones removed). Used by the virtual output, which applies its own curve afterwards.
+    /// </summary>
+    public static double Travel(int raw, int rawRest, int rawFull, double bottomPercent, double topPercent)
+    {
+        double travel = rawFull - rawRest;
+        double restEdge = rawRest + travel * Clamp(bottomPercent, 0, MaxDeadzonePercent) / 100.0;
+        double fullEdge = rawFull - travel * Clamp(topPercent, 0, MaxDeadzonePercent) / 100.0;
+        double span = fullEdge - restEdge;
+        if (Math.Abs(span) < 1) return (raw - restEdge) * (travel < 0 ? -1 : 1) > 0 ? 1 : 0;
+        return Clamp((raw - restEdge) / span, 0, 1);
+    }
+
+    /// <summary>
     /// The position DirectInput hands to a game for a raw value: 0 at Min, 0.5 at Center, 1 at Max.
     /// </summary>
     public static double CookedOutput(int raw, AxisCalibration c)

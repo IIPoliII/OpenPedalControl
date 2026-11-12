@@ -12,6 +12,16 @@ public enum ControlKind
     Handbrake,
 }
 
+/// <summary>Where the result of a device's settings goes.</summary>
+public enum OutputMode
+{
+    /// <summary>Stored as the Windows calibration of the real device. Works with the app closed; one-bend curve.</summary>
+    Windows,
+
+    /// <summary>Sent to a vJoy virtual controller by the running app. Full multi-point curve.</summary>
+    Virtual,
+}
+
 /// <summary>Settings of one pedal (or handbrake lever), as stored in the profile file.</summary>
 [DataContract]
 public sealed class ControlSettings
@@ -32,8 +42,14 @@ public sealed class ControlSettings
     [DataMember(Order = 6)] public double BottomDeadzone { get; set; }
     [DataMember(Order = 7)] public double TopDeadzone { get; set; }
 
-    /// <summary>Percentage of pedal travel at which the output reaches 50 %. 50 is linear.</summary>
+    /// <summary>Windows mode: percentage of pedal travel at which the output reaches 50 %. 50 is linear.</summary>
     [DataMember(Order = 8)] public double CurveMidpoint { get; set; } = 50;
+
+    /// <summary>Virtual mode: output in percent at 0, 20, 40, 60, 80 and 100 % of the travel.</summary>
+    [DataMember(Order = 9)] public List<double> CurvePoints { get; set; } = Curve.Linear();
+
+    /// <summary>Virtual mode: HID usage of the vJoy axis this control drives (0x30 = X ... 0x37 = Dial); 0 = off.</summary>
+    [DataMember(Order = 10)] public int VirtualAxis { get; set; }
 
     public bool IsAssigned => UsagePage != 0;
 
@@ -47,7 +63,11 @@ public sealed class ControlSettings
         Name = "";
         Kind = nameof(ControlKind.Generic);
         CurveMidpoint = 50;
+        CurvePoints = Curve.Linear();
     }
+
+    [OnDeserialized]
+    private void OnDeserialized(StreamingContext context) => CurvePoints = Curve.Normalize(CurvePoints);
 }
 
 [DataContract]
@@ -59,6 +79,10 @@ public sealed class DeviceProfile
     [DataMember(Order = 3)] public int ProductId { get; set; }
     [DataMember(Order = 4)] public string Serial { get; set; } = "";
     [DataMember(Order = 5)] public List<ControlSettings> Controls { get; set; } = new List<ControlSettings>();
+    [DataMember(Order = 6)] public string Output { get; set; } = nameof(OutputMode.Windows);
+
+    public OutputMode GetOutputMode() =>
+        System.Enum.TryParse(Output, true, out OutputMode mode) ? mode : OutputMode.Windows;
 
     [OnDeserializing]
     private void OnDeserializing(StreamingContext context)
@@ -67,5 +91,6 @@ public sealed class DeviceProfile
         DeviceName = "";
         Serial = "";
         Controls = new List<ControlSettings>();
+        Output = nameof(OutputMode.Windows);
     }
 }

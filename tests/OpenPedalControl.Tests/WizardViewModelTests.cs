@@ -177,6 +177,14 @@ public class WizardViewModelTests
     }
 
     [Fact]
+    public void Load_cell_interface_with_one_axis_is_a_handbrake()
+    {
+        var device = new FakeDevice(1);
+        ControlViewModel control = Assert.Single(device.CreateControls("BU0836-LC Interface", 0x16C0, 0x05B7));
+        Assert.Equal(ControlKind.Handbrake, control.Kind);
+    }
+
+    [Fact]
     public void Handbrake_has_a_single_step()
     {
         var device = new FakeDevice();

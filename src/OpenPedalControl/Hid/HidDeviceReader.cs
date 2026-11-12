@@ -66,6 +66,9 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
     public ushort ProductId { get; private set; }
     public IReadOnlyList<HidAxis> Axes { get; }
 
+    /// <summary>Raised on the reader's background thread after each input report has been parsed.</summary>
+    public event Action<HidDeviceReader>? ReportReceived;
+
     /// <summary>True once the device has gone away or the reader was disposed.</summary>
     public bool IsClosed => Volatile.Read(ref _closed) != 0;
 
@@ -239,7 +242,9 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
             {
                 int read = await _stream.ReadAsync(report, 0, report.Length).ConfigureAwait(false);
                 if (read == 0) break;
-                if (read == report.Length) ParseReport(report);
+                if (read != report.Length) continue;
+                ParseReport(report);
+                ReportReceived?.Invoke(this);
             }
         }
         catch (Exception)

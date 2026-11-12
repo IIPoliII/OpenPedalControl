@@ -14,6 +14,9 @@ public static class DeviceTemplates
     private const int LegacyHeusinkveldVendorId = 0x10C4;
     private const int LegacyHeusinkveldPedalsProductId = 0x8B02;
 
+    private const int LeoBodnarVendorId = 0x16C0;
+    private const int LeoBodnarBu0836LcProductId = 0x05B7;
+
     private const int GenericDesktopPage = 0x01;
     private const int UsageX = 0x30, UsageY = 0x31, UsageZ = 0x32;
 
@@ -21,7 +24,11 @@ public static class DeviceTemplates
     {
         bool isLegacyPedals = vendorId == LegacyHeusinkveldVendorId && productId == LegacyHeusinkveldPedalsProductId;
         // Other first-generation Heusinkveld controllers ("HE ...") with axes are single-lever devices: the handbrake.
+        // The first Heusinkveld handbrake shipped with a Leo Bodnar BU0836-LC load cell interface with one axis.
+        bool isLoadCellInterface = (vendorId == LeoBodnarVendorId && productId == LeoBodnarBu0836LcProductId) ||
+                                   Contains(deviceName, "BU0836-LC");
         bool isHandbrake = Contains(deviceName, "HANDBRAKE") || Contains(deviceName, "HAND BRAKE") ||
+                           (isLoadCellInterface && axes.Count == 1) ||
                            (!isLegacyPedals && !Contains(deviceName, "PEDAL") &&
                             deviceName.StartsWith("HE ", StringComparison.OrdinalIgnoreCase));
         bool isPedals = !isHandbrake && (isLegacyPedals || Contains(deviceName, "PEDAL"));
@@ -55,10 +62,22 @@ public static class DeviceTemplates
         settings.BottomDeadzone = kind == ControlKind.Generic ? 0 : DefaultDeadzone;
         settings.TopDeadzone = kind == ControlKind.Generic || kind == ControlKind.Brake ? 0 : DefaultDeadzone;
         settings.CurveMidpoint = 50;
+        settings.CurvePoints = Curve.Linear();
     }
+
+    /// <summary>Default vJoy axis per role, chosen so pedals and a handbrake on separate USB devices never collide.</summary>
+    public static int DefaultVirtualAxis(ControlKind kind) => kind switch
+    {
+        ControlKind.Throttle => 0x30, // X
+        ControlKind.Brake => 0x31,    // Y
+        ControlKind.Clutch => 0x32,   // Z
+        ControlKind.Handbrake => 0x33, // Rx
+        _ => 0,
+    };
 
     private static ControlSettings Create(string name, ControlKind kind, HidAxis axis, double bottom, double top) => new ControlSettings
     {
+        VirtualAxis = DefaultVirtualAxis(kind),
         Name = name,
         Kind = kind.ToString(),
         UsagePage = axis.UsagePage,

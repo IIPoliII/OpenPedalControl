@@ -1,0 +1,85 @@
+; Inno Setup script for OpenPedalControl. Build it with build-installer.ps1, which stages the files below.
+; Expects in installer\staging: OpenPedalControl.exe, LICENSE, README.md, vJoySetup.exe, vJoy-LICENSE.txt
+
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
+
+#define AppName "OpenPedalControl"
+#define AppExe "OpenPedalControl.exe"
+#define VJoyUninstallKey "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{8E31F76F-74C3-47F1-9550-E041EEDC5FBB}_is1"
+
+[Setup]
+AppId={{4F0E5B0C-9C1A-4B57-9E0B-2D7A61C0B4A1}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher=OpenPedalControl contributors
+AppPublisherURL=https://github.com/IIPoliII/OpenPedalControl
+AppSupportURL=https://github.com/IIPoliII/OpenPedalControl/issues
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+DisableProgramGroupPage=yes
+LicenseFile=staging\LICENSE
+OutputDir=output
+OutputBaseFilename=OpenPedalControl-Setup-{#AppVersion}
+SetupIconFile=..\src\OpenPedalControl\Assets\app.ico
+UninstallDisplayIcon={app}\{#AppExe}
+; vJoy is a driver, and Program Files needs administrator rights anyway.
+#ifdef Preview
+; Screenshot builds of the wizard pages only; never released.
+PrivilegesRequired=lowest
+#else
+PrivilegesRequired=admin
+#endif
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0
+; Never replace the exe while the app runs (it may be sitting in the tray).
+AppMutex=OpenPedalControl.Instance
+CloseApplications=yes
+WizardStyle=modern
+Compression=lzma2
+SolidCompression=yes
+
+[Types]
+Name: "full"; Description: "Recommended"
+
+[Tasks]
+Name: "vjoy"; Description: "Install vJoy (free virtual controller driver)"; GroupDescription: "Custom curves need vJoy. Without it, OpenPedalControl can only store the Windows calibration: a curve with one bend, that works with the app closed. You can also install vJoy later with the link in the app."; Check: not IsVJoyInstalled
+Name: "startup"; Description: "Start OpenPedalControl with Windows (hidden in the notification area)"; GroupDescription: "Startup (only needed for custom curves; can be changed in the app):"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+[Files]
+Source: "staging\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "staging\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "staging\README.md"; DestDir: "{app}"; Flags: ignoreversion
+; Kept so vJoy can also be installed later with the app's "Install vJoy" link.
+Source: "staging\vJoySetup.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "staging\vJoy-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\vJoySetup.exe"; Parameters: "/SILENT /NORESTART /SUPPRESSMSGBOXES"; StatusMsg: "Installing the vJoy driver..."; Tasks: vjoy; Flags: waituntilterminated
+; "Start with Windows" belongs to the signed-in user, not the administrator account used for setup.
+Filename: "{app}\{#AppExe}"; Parameters: "--startup on"; Tasks: startup; Flags: runasoriginaluser waituntilterminated
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: postinstall nowait skipifsilent runasoriginaluser
+
+[UninstallRun]
+Filename: "{app}\{#AppExe}"; Parameters: "--startup off"; RunOnceId: "RemoveStartup"; Flags: waituntilterminated runhidden
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
+[Code]
+function IsVJoyInstalled: Boolean;
+begin
+#ifdef Preview
+  Result := False; // Preview builds always show the vJoy option.
+#else
+  Result := RegKeyExists(HKLM64, '{#VJoyUninstallKey}') or RegKeyExists(HKLM32, '{#VJoyUninstallKey}');
+#endif
+end;

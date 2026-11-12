@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
@@ -21,6 +22,10 @@ public sealed class CurveGraph : FrameworkElement
     private static readonly Pen CrosshairPen = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(0x70, 0x1B, 0x22, 0x30)), 1));
 
     public static readonly DependencyProperty KneeProperty = Register(nameof(Knee), 0.5);
+    public static readonly DependencyProperty PointsProperty = Register<IReadOnlyList<double>?>(nameof(Points), null);
+
+    /// <summary>Evenly spaced output values (0..100). When set, drawn instead of the one-bend curve.</summary>
+    public IReadOnlyList<double>? Points { get => (IReadOnlyList<double>?)GetValue(PointsProperty); set => SetValue(PointsProperty, value); }
     public static readonly DependencyProperty InputProperty = Register(nameof(Input), double.NaN);
     public static readonly DependencyProperty OutputProperty = Register(nameof(Output), double.NaN);
     public static readonly DependencyProperty StrokeProperty = Register(nameof(Stroke), DefaultStroke);
@@ -73,17 +78,30 @@ public sealed class CurveGraph : FrameworkElement
         dc.DrawLine(LinearPen, At(0, 0), At(1, 1));
 
         Brush stroke = Stroke ?? DefaultStroke;
-        double knee = Knee < 0.01 ? 0.01 : Knee > 0.99 ? 0.99 : Knee;
+        // Either the multi-point curve of the virtual output, or Windows' two segments meeting at 50 %.
+        IReadOnlyList<double>? points = Points;
+        Point[] vertices;
+        if (points != null && points.Count >= 2)
+        {
+            vertices = new Point[points.Count];
+            for (int i = 0; i < points.Count; i++) vertices[i] = At(i / (double)(points.Count - 1), Clamp01(points[i] / 100.0));
+        }
+        else
+        {
+            double knee = Knee < 0.01 ? 0.01 : Knee > 0.99 ? 0.99 : Knee;
+            vertices = new[] { At(0, 0), At(knee, 0.5), At(1, 1) };
+        }
+
         var curve = new StreamGeometry();
         using (StreamGeometryContext context = curve.Open())
         {
-            context.BeginFigure(At(0, 0), false, false);
-            context.LineTo(At(knee, 0.5), true, true);
-            context.LineTo(At(1, 1), true, true);
+            context.BeginFigure(vertices[0], false, false);
+            for (int i = 1; i < vertices.Length; i++) context.LineTo(vertices[i], true, true);
         }
         curve.Freeze();
         dc.DrawGeometry(null, new Pen(stroke, 2) { LineJoin = PenLineJoin.Round }, curve);
-        dc.DrawEllipse(stroke, null, At(knee, 0.5), 3.5, 3.5);
+        for (int i = points != null ? 0 : 1; i < (points != null ? vertices.Length : 2); i++)
+            dc.DrawEllipse(stroke, null, vertices[i], 3.5, 3.5);
 
         if (!double.IsNaN(Input) && !double.IsNaN(Output))
         {

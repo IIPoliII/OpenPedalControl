@@ -13,6 +13,44 @@ public sealed class AxisOption
 
     public HidAxis? Axis { get; }
     public string Label => Axis?.Name ?? "None";
+    public override string ToString() => Label;
+}
+
+public sealed class VirtualAxisOption
+{
+    public VirtualAxisOption(int usage, string label)
+    {
+        Usage = usage;
+        Label = label;
+    }
+
+    public int Usage { get; }
+    public string Label { get; }
+    public override string ToString() => Label;
+}
+
+/// <summary>One editable point of the virtual-mode curve.</summary>
+public sealed class CurvePointViewModel : ObservableObject
+{
+    private readonly ControlViewModel _owner;
+
+    internal CurvePointViewModel(ControlViewModel owner, int index)
+    {
+        _owner = owner;
+        Index = index;
+    }
+
+    public int Index { get; }
+    public string InputLabel => Curve.InputOf(Index) + " %";
+    public string AccessibleName => "Output at " + InputLabel + " travel";
+
+    public double Value
+    {
+        get => _owner.Settings.CurvePoints[Index];
+        set => _owner.SetCurvePoint(Index, value);
+    }
+
+    internal void Refresh() => Raise(nameof(Value));
 }
 
 /// <summary>One pedal card: its settings, the calibration they produce and the live readout.</summary>
@@ -31,6 +69,10 @@ public sealed class ControlViewModel : ObservableObject
     private string _rawText = "–";
     private string _outputText = "–";
 
+    private bool _isVirtual;
+    private bool _virtualOk;
+    private string _virtualStatus = "";
+
     public ControlViewModel(ControlSettings settings, IAxisSource reader, IReadOnlyList<AxisOption> axisOptions)
     {
         Settings = settings;
@@ -40,6 +82,7 @@ public sealed class ControlViewModel : ObservableObject
         Accent = AccentFor(Kind);
         _selectedAxis = axisOptions.FirstOrDefault(o => o.Axis != null && o.Axis.UsagePage == settings.UsagePage && o.Axis.Usage == settings.Usage)
                         ?? axisOptions[0];
+        CurvePoints = Enumerable.Range(0, Curve.PointCount).Select(i => new CurvePointViewModel(this, i)).ToList();
         Recompute();
     }
 
@@ -48,6 +91,9 @@ public sealed class ControlViewModel : ObservableObject
 
     /// <summary>Raised when the control is moved to a different axis.</summary>
     public event EventHandler? AxisChanged;
+
+    /// <summary>Raised when the control is sent to a different vJoy axis.</summary>
+    public event EventHandler? VirtualAxisChanged;
 
     public ControlSettings Settings { get; }
     public ControlKind Kind { get; }
@@ -166,6 +212,100 @@ public sealed class ControlViewModel : ObservableObject
     public double MidpointMinimum => CalibrationMath.MinMidpointPercent;
     public double MidpointMaximum => CalibrationMath.MaxMidpointPercent;
 
+    // --- Virtual mode -------------------------------------------------------------------------------
+
+    public static IReadOnlyList<VirtualAxisOption> VirtualAxisOptions { get; } =
+        new[] { new VirtualAxisOption(0, "Off") }
+            .Concat(VJoy.VJoyDevice.AxisNames.Select(a => new VirtualAxisOption(a.usage, a.name)))
+            .ToList();
+
+    private static readonly CurvePreset CustomPreset = new CurvePreset("Custom");
+
+    public static IReadOnlyList<CurvePreset> PresetOptions { get; } = Curve.Presets.Concat(new[] { CustomPreset }).ToList();
+
+    /// <summary>True when this device sends to vJoy instead of storing a Windows calibration.</summary>
+    public bool IsVirtual => _isVirtual;
+    public bool IsWindows => !_isVirtual;
+
+    public IReadOnlyList<CurvePointViewModel> CurvePoints { get; }
+
+    public CurvePreset SelectedPreset
+    {
+        get => Curve.MatchPreset(Settings.CurvePoints) ?? CustomPreset;
+        set
+        {
+            if (value == null || ReferenceEquals(value, CustomPreset) || value.Points.Count != Curve.PointCount) return;
+            Settings.CurvePoints = value.Points.ToList();
+            OnCurveChanged();
+        }
+    }
+
+    public VirtualAxisOption SelectedVirtualAxis
+    {
+        get => VirtualAxisOptions.FirstOrDefault(o => o.Usage == Settings.VirtualAxis) ?? VirtualAxisOptions[0];
+        set
+        {
+            if (value == null || value.Usage == Settings.VirtualAxis) return;
+            Settings.VirtualAxis = value.Usage;
+            Raise();
+            Raise(nameof(StateText));
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+            VirtualAxisChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Called when another control took this control's vJoy axis.</summary>
+    public void RefreshVirtualAxis()
+    {
+        Raise(nameof(SelectedVirtualAxis));
+        Raise(nameof(StateText));
+    }
+
+    /// <summary>Curve points for the graph in virtual mode; null draws the one-bend Windows curve.</summary>
+    public IReadOnlyList<double>? GraphPoints => _isVirtual ? Settings.CurvePoints.ToArray() : null;
+
+    internal void SetCurvePoint(int index, double value)
+    {
+        value = Math.Round(CalibrationMath.Clamp(value, 0, 100));
+        if (value.Equals(Settings.CurvePoints[index])) return;
+        // Replace rather than edit the list: the virtual output reads it from another thread.
+        var points = Settings.CurvePoints.ToList();
+        points[index] = value;
+        Settings.CurvePoints = points;
+        OnCurveChanged();
+    }
+
+    private void OnCurveChanged()
+    {
+        foreach (CurvePointViewModel point in CurvePoints) point.Refresh();
+        Raise(nameof(SelectedPreset));
+        Raise(nameof(GraphPoints));
+        _liveStale = true;
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetOutputMode(bool isVirtual)
+    {
+        if (_isVirtual == isVirtual) return;
+        _isVirtual = isVirtual;
+        _liveStale = true;
+        Raise(nameof(IsVirtual));
+        Raise(nameof(IsWindows));
+        Raise(nameof(GraphPoints));
+        Raise(nameof(IsApplied));
+        Raise(nameof(StateText));
+    }
+
+    /// <summary>Whether the virtual output currently delivers this control, with a short explanation.</summary>
+    public void SetVirtualStatus(bool ok, string text)
+    {
+        if (_virtualOk == ok && _virtualStatus == text) return;
+        _virtualOk = ok;
+        _virtualStatus = text;
+        Raise(nameof(IsApplied));
+        Raise(nameof(StateText));
+    }
+
     public string CurveName =>
         Settings.CurveMidpoint > 50 ? "Progressive – gentle at first" :
         Settings.CurveMidpoint < 50 ? "Degressive – strong at first" :
@@ -177,9 +317,14 @@ public sealed class ControlViewModel : ObservableObject
     public AxisCalibration Computed => _computed;
 
     /// <summary>Calibration matches what Windows currently has stored for this axis.</summary>
-    public bool IsApplied => IsAssigned && _applied.HasValue && _applied.Value == _computed;
+    public bool IsApplied => _isVirtual
+        ? IsAssigned && Settings.VirtualAxis != 0 && _virtualOk
+        : IsAssigned && _applied.HasValue && _applied.Value == _computed;
 
-    public string StateText => !IsAssigned ? "No axis assigned" : IsApplied ? "Saved in Windows" : "Not saved yet";
+    public string StateText =>
+        !IsAssigned ? "No axis assigned" :
+        _isVirtual ? (Settings.VirtualAxis == 0 ? "Not sent to vJoy (axis off)" : _virtualStatus) :
+        IsApplied ? "Saved in Windows" : "Not saved yet";
 
     public string ActiveRangeText
     {
@@ -222,10 +367,19 @@ public sealed class ControlViewModel : ObservableObject
 
         if (raw is int r && Axis is HidAxis a)
         {
-            double cooked = CalibrationMath.CookedOutput(r, _computed);
-            double output = IsInverted ? 1 - cooked : cooked;
-            double span = Math.Max(1, _computed.Max - _computed.Min);
-            double travel = IsInverted ? (_computed.Max - r) / span : (r - _computed.Min) / span;
+            double travel, output;
+            if (_isVirtual)
+            {
+                travel = CalibrationMath.Travel(r, Settings.RawRest, Settings.RawFull, Settings.BottomDeadzone, Settings.TopDeadzone);
+                output = Curve.Evaluate(Settings.CurvePoints, travel);
+            }
+            else
+            {
+                double cooked = CalibrationMath.CookedOutput(r, _computed);
+                output = IsInverted ? 1 - cooked : cooked;
+                double span = Math.Max(1, _computed.Max - _computed.Min);
+                travel = IsInverted ? (_computed.Max - r) / span : (r - _computed.Min) / span;
+            }
 
             RawLevel = (r - a.LogicalMin) / (double)Math.Max(1, a.LogicalMax - a.LogicalMin);
             OutputLevel = output;
@@ -279,6 +433,9 @@ public sealed class ControlViewModel : ObservableObject
         Raise(nameof(TopValue));
         Raise(nameof(Midpoint));
         Raise(nameof(CurveName));
+        foreach (CurvePointViewModel point in CurvePoints) point.Refresh();
+        Raise(nameof(SelectedPreset));
+        Raise(nameof(GraphPoints));
         OnSettingsChanged();
     }
 

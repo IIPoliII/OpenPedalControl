@@ -36,11 +36,17 @@ jobs:
         shell: bash
         run: dotnet test OpenPedalControl.slnx --configuration Release -p:Version=${{ steps.version.outputs.value }}
 
+      # Installer with the optional vJoy driver (Inno Setup is preinstalled on GitHub's Windows runners).
+      - name: Build installer
+        shell: pwsh
+        run: ./installer/build-installer.ps1 -Version "${{ steps.version.outputs.value }}"
+
       - name: Collect files
         shell: bash
         run: |
-          mkdir dist
-          cp src/OpenPedalControl/bin/Release/net48/OpenPedalControl.exe LICENSE README.md dist/
+          mkdir -p dist/portable
+          cp src/OpenPedalControl/bin/Release/net48/OpenPedalControl.exe LICENSE README.md dist/portable/
+          cp installer/output/OpenPedalControl-Setup-*.exe dist/
 
       - uses: actions/upload-artifact@v7
         with:
@@ -59,16 +65,18 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: OpenPedalControl
-          path: OpenPedalControl
+          path: dist
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          zip -r "OpenPedalControl-${GITHUB_REF_NAME}.zip" OpenPedalControl
+          cd dist
+          (cd portable && zip -r "../OpenPedalControl-${GITHUB_REF_NAME}-portable.zip" .)
           gh release create "$GITHUB_REF_NAME" \
-            "OpenPedalControl-${GITHUB_REF_NAME}.zip" \
-            OpenPedalControl/OpenPedalControl.exe \
+            OpenPedalControl-Setup-*.exe \
+            "OpenPedalControl-${GITHUB_REF_NAME}-portable.zip" \
+            portable/OpenPedalControl.exe \
             --repo "$GITHUB_REPOSITORY" \
             --title "OpenPedalControl ${GITHUB_REF_NAME#v}" \
             --generate-notes \
