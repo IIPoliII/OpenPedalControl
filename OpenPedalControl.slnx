@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenPedalControl/OpenPedalControl.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenPedalControl.Tests/OpenPedalControl.Tests.csproj" />
+  </Folder>
+</Solution>

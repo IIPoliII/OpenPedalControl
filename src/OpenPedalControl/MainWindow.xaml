@@ -1,0 +1,247 @@
+<Window x:Class="OpenPedalControl.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:OpenPedalControl.ViewModels"
+        xmlns:c="clr-namespace:OpenPedalControl.Controls"
+        Title="OpenPedalControl" Width="1160" Height="780" MinWidth="860" MinHeight="640"
+        Background="{StaticResource WindowBackground}" Foreground="{StaticResource TextPrimary}" FontSize="13"
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True" Icon="Assets/app.ico">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <Style x:Key="FieldRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,3"/>
+        </Style>
+
+        <DataTemplate x:Key="ControlCard" DataType="{x:Type vm:ControlViewModel}">
+            <Border Style="{StaticResource Card}" Margin="8" MinWidth="300">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Title and axis assignment -->
+                    <DockPanel Grid.Row="0">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Axis" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox ItemsSource="{Binding AxisOptions}" SelectedItem="{Binding SelectedAxis, Mode=TwoWay}" AutomationProperties.Name="Axis"
+                                      DisplayMemberPath="Label" MinWidth="82" Height="28" VerticalContentAlignment="Center"
+                                      ToolTip="The controller input this pedal is wired to. The calibration finds it automatically."/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="5" Height="22" CornerRadius="2.5" Background="{Binding Accent}" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding Name}" FontSize="19" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Settings -->
+                        <Grid Grid.Column="0" IsEnabled="{Binding IsAssigned}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*" MinHeight="120"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="CALIBRATION" Style="{StaticResource SectionTitle}"/>
+                            <Grid Grid.Row="1" Style="{StaticResource FieldRow}"
+                                  ToolTip="Raw sensor value with the pedal released. Set by the calibration.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="84"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Released (raw)" Style="{StaticResource FieldLabel}"/>
+                                <c:NumberBox Grid.Column="1" AutomationProperties.Name="Released (raw)" Value="{Binding RawRest}" Minimum="{Binding AxisMinimum}" Maximum="{Binding AxisMaximum}"/>
+                            </Grid>
+                            <Grid Grid.Row="2" Style="{StaticResource FieldRow}"
+                                  ToolTip="Raw sensor value with the pedal fully pressed. Set by the calibration.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="84"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Fully pressed (raw)" Style="{StaticResource FieldLabel}"/>
+                                <c:NumberBox Grid.Column="1" AutomationProperties.Name="Fully pressed (raw)" Value="{Binding RawFull}" Minimum="{Binding AxisMinimum}" Maximum="{Binding AxisMaximum}"/>
+                            </Grid>
+
+                            <TextBlock Grid.Row="3" Text="DEADZONE" Style="{StaticResource SectionTitle}"/>
+                            <Grid Grid.Row="4" Style="{StaticResource FieldRow}"
+                                  ToolTip="Share of the travel ignored at the released end, so a resting foot does not register.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="84"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Bottom deadzone" Style="{StaticResource FieldLabel}"/>
+                                <c:NumberBox Grid.Column="1" AutomationProperties.Name="Bottom deadzone" Value="{Binding BottomDeadzone}" Minimum="0" Maximum="{Binding BottomMaximum}" Suffix="%"/>
+                            </Grid>
+                            <Grid Grid.Row="5" Style="{StaticResource FieldRow}" ToolTip="{Binding TopToolTip}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="84"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding TopLabel}" Style="{StaticResource FieldLabel}"/>
+                                <c:NumberBox Grid.Column="1" AutomationProperties.Name="{Binding TopLabel}" Value="{Binding TopValue}" Minimum="{Binding TopMinimum}" Maximum="{Binding TopMaximum}" Suffix="%"/>
+                            </Grid>
+
+                            <TextBlock Grid.Row="6" Text="OUTPUT CURVE" Style="{StaticResource SectionTitle}"/>
+                            <Grid Grid.Row="7" Style="{StaticResource FieldRow}"
+                                  ToolTip="Pedal travel at which the output reaches 50 %. 50 is linear; higher is gentler at the start.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="84"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Curve midpoint" Style="{StaticResource FieldLabel}"/>
+                                <c:NumberBox Grid.Column="1" AutomationProperties.Name="Curve midpoint" Value="{Binding Midpoint}" Minimum="{Binding MidpointMinimum}" Maximum="{Binding MidpointMaximum}" Suffix="%"/>
+                            </Grid>
+                            <Slider Grid.Row="8" Margin="0,4,0,0" Value="{Binding Midpoint}" Minimum="{Binding MidpointMinimum}" Maximum="{Binding MidpointMaximum}"
+                                    SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True" TickFrequency="1"
+                                    AutomationProperties.Name="Curve: travel at 50 % output"/>
+
+                            <DockPanel Grid.Row="9" Margin="0,6,0,0">
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding CurveName}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                <c:CurveGraph Knee="{Binding Knee}" Input="{Binding Travel}" Output="{Binding OutputLevel}" Stroke="{Binding Accent}"/>
+                            </DockPanel>
+
+                            <StackPanel Grid.Row="10" Margin="0,8,0,0">
+                                <TextBlock Text="{Binding ActiveRangeText}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding StateText}" FontSize="12" FontWeight="SemiBold" Margin="0,2,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsApplied}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsAssigned}" Value="False">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Live bars -->
+                        <Grid Grid.Column="1" Margin="14,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42"/>
+                                <ColumnDefinition Width="42"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Raw" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
+                            <c:LevelBar Grid.Row="1" Grid.Column="0" Width="26" Margin="0,6"
+                                        Value="{Binding RawLevel}" ZoneLow="{Binding ZoneLow}" ZoneHigh="{Binding ZoneHigh}"
+                                        ToolTip="Raw sensor position. The shaded ends are outside the active range."/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding RawText}" HorizontalAlignment="Center" FontWeight="SemiBold"/>
+
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Output" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
+                            <c:LevelBar Grid.Row="1" Grid.Column="1" Width="26" Margin="0,6"
+                                        Value="{Binding OutputLevel}" Fill="{Binding Accent}"
+                                        ToolTip="What a game receives with these settings."/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding OutputText}" HorizontalAlignment="Center" FontWeight="SemiBold"/>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Header -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource HeaderBackground}" Padding="24,14">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="OpenPedalControl" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding Version}" Foreground="{StaticResource HeaderMuted}" FontSize="12" VerticalAlignment="Bottom" Margin="8,0,0,4"/>
+                    </StackPanel>
+                    <TextBlock Text="Calibration for legacy sim pedals and handbrakes" Foreground="{StaticResource HeaderMuted}" FontSize="12"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Device" Foreground="{StaticResource HeaderMuted}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ComboBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}" DisplayMemberPath="Label"
+                              MinWidth="250" Height="30" VerticalContentAlignment="Center" AutomationProperties.Name="Device"/>
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource HeaderButton}" Margin="8,0,0,0"
+                            ToolTip="Look for connected controllers again and reload the selected one."/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Actions -->
+        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="{StaticResource CardBorder}" BorderThickness="0,1,0,0" Padding="24,12">
+            <DockPanel>
+                <Button DockPanel.Dock="Left" Content="Calibrate…" Click="OnCalibrateClick" Style="{StaticResource SecondaryButton}"
+                        IsEnabled="{Binding HasDevice}" ToolTip="Guided calibration: measures the released and fully pressed position of each pedal."/>
+                <Button DockPanel.Dock="Left" Content="Reset settings" Command="{Binding ResetCommand}" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
+                        ToolTip="Put deadzones and curves back to their defaults. The measured calibration is kept."/>
+                <Button DockPanel.Dock="Left" Content="Remove calibration" Click="OnRemoveCalibrationClick" Style="{StaticResource QuietButton}" Margin="8,0,0,0"
+                        IsEnabled="{Binding HasDevice}" ToolTip="Delete this device's calibration from Windows and start over."/>
+                <Button DockPanel.Dock="Right" Content="Save to Windows" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}" MinWidth="150"
+                        ToolTip="Store the calibration in Windows so every game uses it. Nothing is written to the pedals themselves."/>
+                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" TextTrimming="CharacterEllipsis"
+                           Foreground="{StaticResource TextMuted}" TextAlignment="Right" ToolTip="{Binding Status}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Device details -->
+        <DockPanel DockPanel.Dock="Top" Margin="26,12,26,0" LastChildFill="False"
+                   Visibility="{Binding HasDevice, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock DockPanel.Dock="Left" Text="{Binding DeviceSummary}" Style="{StaticResource Muted}" VerticalAlignment="Center"/>
+            <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="12">
+                <Hyperlink Command="{Binding OpenGameControllersCommand}" Foreground="{StaticResource AccentBrush}">Open Windows game controllers</Hyperlink>
+            </TextBlock>
+        </DockPanel>
+
+        <Grid>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="16,6,16,10"
+                          Visibility="{Binding HasDevice, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl ItemsSource="{Binding Controls}" ItemTemplate="{StaticResource ControlCard}" Focusable="False"
+                              MinWidth="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                              MinHeight="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Shown while no device is open -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="460">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasDevice}" Value="False">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="No device open" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding Status}" Style="{StaticResource Muted}" FontSize="13" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,16"/>
+                <Button Content="Look again" Command="{Binding RefreshCommand}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</Window>
