@@ -41,6 +41,26 @@ public sealed class VirtualOutput : IDisposable
     private Dictionary<HidDeviceReader, Binding[]> _bindings = new Dictionary<HidDeviceReader, Binding[]>();
     private VJoyDevice? _vjoy;
     private HashSet<int> _usedAxes = new HashSet<int>();
+    private uint _requestedDevice;
+
+    /// <summary>vJoy device to use (1..16), or 0 for the first free one so devices of other programs are never taken.</summary>
+    public uint RequestedDevice
+    {
+        get => _requestedDevice;
+        set
+        {
+            lock (_lock)
+            {
+                if (_requestedDevice == value) return;
+                _requestedDevice = value;
+                ReleaseVJoy();
+            }
+            Rebuild();
+        }
+    }
+
+    /// <summary>The vJoy device currently fed, or 0.</summary>
+    public uint CurrentDeviceId => _vjoy?.Id ?? 0;
 
     public VirtualOutputState State { get; private set; } = VirtualOutputState.Idle;
     public string Problem { get; private set; } = "";
@@ -110,7 +130,7 @@ public sealed class VirtualOutput : IDisposable
 
             if (_vjoy == null)
             {
-                _vjoy = VJoyDevice.Acquire(VJoyDevice.DefaultDeviceId, out string problem);
+                _vjoy = AcquireVJoy(out string problem);
                 if (_vjoy == null)
                 {
                     _bindings = new Dictionary<HidDeviceReader, Binding[]>();
@@ -155,6 +175,22 @@ public sealed class VirtualOutput : IDisposable
     {
         double travel = CalibrationMath.Travel(raw, settings.RawRest, settings.RawFull, settings.BottomDeadzone, settings.TopDeadzone);
         return Curve.Evaluate(settings.CurvePoints, travel);
+    }
+
+    private VJoyDevice? AcquireVJoy(out string problem)
+    {
+        if (_requestedDevice != 0) return VJoyDevice.Acquire(_requestedDevice, out problem);
+
+        problem = "vJoy is not installed.";
+        if (!VJoyDevice.IsDriverAvailable) return null;
+        foreach ((uint id, VJoyStatus status) in VJoyDevice.ListDevices())
+        {
+            if (status != VJoyStatus.Free && status != VJoyStatus.Own) continue;
+            VJoyDevice? device = VJoyDevice.Acquire(id, out problem);
+            if (device != null) return device;
+        }
+        problem = "Every vJoy device is in use by another program. Add a device in “Configure vJoy” (Settings).";
+        return null;
     }
 
     private void ReleaseVJoy()

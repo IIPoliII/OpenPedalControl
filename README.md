@@ -23,7 +23,9 @@ output curves and live bars.
   - **Windows calibration**: stored in Windows, works with the app closed, curve with one bend.
   - **Virtual controller (vJoy)**: fully custom 6-point curve with presets, the app runs in the tray.
 - **Live view** of the raw sensor value and of what a game will receive.
-- **Start with Windows** (hidden in the notification area), one tick in the top bar.
+- **Settings**: start with Windows (hidden in the notification area), which vJoy device to use, updates.
+- **Updates** from GitHub: checked at startup (can be turned off) or by hand, installed in one click. After an
+  update the app comes back in the tray with a notification; the full changelog is under *What's new*.
 - **Raw numbers stay editable**, for those who know their values from DIView.
 - Picks up a calibration that already exists in Windows, and can remove its own again without a trace.
 
@@ -33,7 +35,7 @@ From the [latest release](../../releases/latest):
 
 - **`OpenPedalControl-Setup-x.y.z.exe`** (recommended): installs the app and, if you leave the box ticked,
   the free [vJoy](https://github.com/BrunnerInnovation/vJoy) driver needed for custom curves. Without vJoy you can
-  only use the Windows calibration (one-bend curve). vJoy can also be added later with the link in the app.
+  only use the Windows calibration (one-bend curve). vJoy can also be added later from the app's Settings.
 - **`OpenPedalControl.exe`**: the portable app on its own, nothing to install.
 
 Windows 10 or 11 (64-bit). The .NET Framework 4.8 it uses is part of Windows.
@@ -53,7 +55,9 @@ The old controllers have no memory of their own, so whatever you set has to live
 the *Game Controllers* control panel use. Windows applies it for every DirectInput game.
 
 **Virtual controller** reads the raw pedal values, applies deadzones and your curve, and sends the result to
-vJoy device 1 the moment the pedals report, so it adds no noticeable delay. By default throttle goes to X, brake to Y,
+vJoy the moment the pedals report, so it adds no noticeable delay. By default it uses the first vJoy device no
+other program is using, so a vJoy device you already set up for something else is left alone; Settings lets you pick
+one (vJoy supports up to 16). By default throttle goes to X, brake to Y,
 clutch to Z and handbrake to Rx; each can be changed. Closing the window keeps it running in the notification area;
 right-click the tray icon to exit. Tip: [HidHide](https://github.com/nefarius/HidHide) can hide the real pedals from
 games so they only see vJoy.
@@ -104,7 +108,8 @@ The exe ends up in `src/OpenPedalControl/bin/Release/net48/`. The installer addi
 ```
 
 It downloads the official vJoy installer, checks its SHA-256 and bundles it. Pushing a tag like `v0.2.0` makes
-GitHub Actions build everything and publish a release.
+GitHub Actions build everything and publish a release. Add the release to [CHANGELOG.md](CHANGELOG.md) first: it
+is built into the app and shown as *What's new*.
 
 ## Disclaimer
 

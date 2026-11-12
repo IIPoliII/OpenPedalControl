@@ -7,6 +7,7 @@ using System.Reflection;
 using OpenPedalControl.DirectInput;
 using OpenPedalControl.Hid;
 using OpenPedalControl.Model;
+using OpenPedalControl.Updates;
 using OpenPedalControl.VJoy;
 
 namespace OpenPedalControl.ViewModels;
@@ -23,6 +24,22 @@ public sealed class DeviceEntry
     public string Label { get; }
 
     // Screen readers and UI automation read list items through ToString.
+    public override string ToString() => Label;
+}
+
+public sealed class VJoyDeviceOption : ObservableObject
+{
+    private string _label;
+
+    public VJoyDeviceOption(int id, string label)
+    {
+        Id = id;
+        _label = label;
+    }
+
+    /// <summary>1..16, or 0 for automatic.</summary>
+    public int Id { get; }
+    public string Label { get => _label; set => Set(ref _label, value); }
     public override string ToString() => Label;
 }
 
@@ -44,6 +61,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _deviceSummary = "";
     private string _virtualStatus = "";
     private bool _virtualOk;
+    private readonly AppSettings _settings = AppSettings.Load();
+    private UpdateInfo? _update;
+    private string _updateStatus = "";
+    private bool _updateBusy;
 
     public MainViewModel()
     {
@@ -53,6 +74,175 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OpenGameControllersCommand = new RelayCommand(() => Open("control.exe", "joy.cpl"));
         GetVJoyCommand = new RelayCommand(() => Open(VJoyDownloadUrl, null));
         _vJoyInstalled = VJoyDevice.IsDriverAvailable;
+        _output.RequestedDevice = (uint)_settings.VJoyDevice;
+        CheckUpdatesCommand = new RelayCommand(() => _ = CheckForUpdatesAsync(true), () => !_updateBusy);
+        InstallUpdateCommand = new RelayCommand(() => _ = InstallUpdateAsync(), () => _update != null && !_updateBusy);
+        OpenVJoyConfigCommand = new RelayCommand(() => Open(VJoyDevice.ConfigToolPath ?? VJoyDownloadUrl, null), () => VJoyInstalled);
+    }
+
+    // --- Settings window ----------------------------------------------------------------------------
+
+    public RelayCommand CheckUpdatesCommand { get; }
+    public RelayCommand InstallUpdateCommand { get; }
+    public RelayCommand OpenVJoyConfigCommand { get; }
+
+    /// <summary>
+    /// Automatic plus every vJoy device that is set up, with who uses it. Updated in place by
+    /// RefreshVJoyDevices: replacing the list would make the drop-down lose its selection.
+    /// </summary>
+    public ObservableCollection<VJoyDeviceOption> VJoyDeviceOptions { get; } = new ObservableCollection<VJoyDeviceOption>();
+
+    private List<VJoyDeviceOption> BuildVJoyDeviceOptions()
+    {
+        uint current = _output.CurrentDeviceId;
+        var options = new List<VJoyDeviceOption>
+        {
+            new VJoyDeviceOption(0, "Automatic (first free device)" + (current != 0 && _settings.VJoyDevice == 0 ? $": device {current}" : "")),
+        };
+        foreach ((uint id, VJoyStatus status) in VJoyDevice.ListDevices())
+        {
+            string state = status switch
+            {
+                VJoyStatus.Own => "used by OpenPedalControl",
+                VJoyStatus.Busy => "in use by another program",
+                _ => "free",
+            };
+            options.Add(new VJoyDeviceOption((int)id, $"Device {id} ({state})"));
+        }
+        if (_settings.VJoyDevice != 0 && options.All(o => o.Id != _settings.VJoyDevice))
+            options.Add(new VJoyDeviceOption(_settings.VJoyDevice, $"Device {_settings.VJoyDevice} (not set up)"));
+        return options;
+    }
+
+    /// <summary>The chosen vJoy device: 1..16, or 0 for automatic.</summary>
+    public int VJoyDeviceId
+    {
+        get => _settings.VJoyDevice;
+        set
+        {
+            if (value == _settings.VJoyDevice) return;
+            _settings.VJoyDevice = value;
+            SaveSettings();
+            _output.RequestedDevice = (uint)value;
+            UpdateVirtualStatus();
+            // Update the labels after the drop-down has finished its own selection change.
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(RefreshVJoyDevices));
+        }
+    }
+
+    /// <summary>Re-reads vJoy's devices, e.g. after "Configure vJoy" was used.</summary>
+    public void RefreshVJoyDevices()
+    {
+        VJoyInstalled = VJoyDevice.IsDriverAvailable;
+        _output.Rebuild();
+        UpdateVirtualStatus();
+        List<VJoyDeviceOption> wanted = BuildVJoyDeviceOptions();
+        foreach (VJoyDeviceOption stale in VJoyDeviceOptions.Where(o => wanted.All(w => w.Id != o.Id)).ToList())
+            VJoyDeviceOptions.Remove(stale);
+        for (int i = 0; i < wanted.Count; i++)
+        {
+            VJoyDeviceOption? existing = VJoyDeviceOptions.FirstOrDefault(o => o.Id == wanted[i].Id);
+            if (existing == null) VJoyDeviceOptions.Insert(Math.Min(i, VJoyDeviceOptions.Count), wanted[i]);
+            else existing.Label = wanted[i].Label;
+        }
+        Raise(nameof(VJoyDeviceId));
+    }
+
+    public bool CheckForUpdatesOnStart
+    {
+        get => _settings.CheckForUpdates;
+        set
+        {
+            if (value == _settings.CheckForUpdates) return;
+            _settings.CheckForUpdates = value;
+            SaveSettings();
+            Raise();
+        }
+    }
+
+    public string CurrentVersionText => "Installed: " + Version + (Updater.IsInstalled ? "" : " (portable)");
+    public string UpdateStatus { get => _updateStatus; private set => Set(ref _updateStatus, value); }
+    public bool UpdateAvailable => _update != null;
+    public string UpdateBannerText => _update == null ? "" : $"OpenPedalControl {_update.Version} is available.";
+
+    private void SaveSettings()
+    {
+        try { _settings.Save(); }
+        catch (Exception ex) { Status = "Could not save the settings: " + ex.Message; }
+    }
+
+    /// <summary>
+    /// Records the running version. Returns the previous version when the app was updated since it last ran,
+    /// or null (first run, or same version).
+    /// </summary>
+    public string? TakeUpdatedFromVersion()
+    {
+        string current = Version;
+        string previous = _settings.LastVersion;
+        if (previous == current) return null;
+        _settings.LastVersion = current;
+        SaveSettings();
+        return previous.Length == 0 ? null : previous;
+    }
+
+    /// <summary>Called once at startup; respects the "check at startup" setting.</summary>
+    public void CheckForUpdatesAtStartup()
+    {
+        if (_settings.CheckForUpdates) _ = CheckForUpdatesAsync(false);
+    }
+
+    private async System.Threading.Tasks.Task CheckForUpdatesAsync(bool userAsked)
+    {
+        SetUpdateBusy(true);
+        UpdateStatus = "Checking for updates…";
+        try
+        {
+            _update = await Updater.CheckAsync();
+            UpdateStatus = _update == null ? $"You have the latest version ({Version})." : $"Version {_update.Version} is available.";
+        }
+        catch (Exception ex)
+        {
+            _update = null;
+            UpdateStatus = userAsked ? "Could not check for updates: " + ex.Message : "";
+        }
+        finally
+        {
+            SetUpdateBusy(false);
+            Raise(nameof(UpdateAvailable));
+            Raise(nameof(UpdateBannerText));
+        }
+    }
+
+    /// <summary>Raised when an update was downloaded and the app must exit so it can be applied.</summary>
+    public event EventHandler? ExitForUpdate;
+
+    private async System.Threading.Tasks.Task InstallUpdateAsync()
+    {
+        if (_update == null) return;
+        SetUpdateBusy(true);
+        UpdateStatus = $"Downloading version {_update.Version}…";
+        try
+        {
+            string file = await Updater.DownloadAsync(_update);
+            Updater.ApplyAfterExit(file);
+            UpdateStatus = "Installing the update. OpenPedalControl restarts by itself.";
+            ExitForUpdate?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus = "Update failed: " + ex.Message;
+            Open(_update.PageUrl, null);
+        }
+        finally
+        {
+            SetUpdateBusy(false);
+        }
+    }
+
+    private void SetUpdateBusy(bool busy)
+    {
+        _updateBusy = busy;
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
     }
 
     public ObservableCollection<DeviceEntry> Devices { get; } = new ObservableCollection<DeviceEntry>();
@@ -382,7 +572,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         else if (_output.State == VirtualOutputState.Active)
         {
             ok = true;
-            text = $"Live on vJoy device {VJoyDevice.DefaultDeviceId}. Bind the vJoy axes in your sim.";
+            text = $"Live on vJoy device {_output.CurrentDeviceId}. Bind its axes in your sim.";
             if (_output.Problem.Length > 0) text = _output.Problem;
         }
         else text = "No pedal is sent to vJoy.";

@@ -29,7 +29,10 @@
 
   <ItemGroup>
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Net.Http" />
     <Resource Include="Assets\app.ico" />
+    <!-- Shown in the app as "What's new". -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="CHANGELOG.md" Link="CHANGELOG.md" />
   </ItemGroup>
 
 </Project>

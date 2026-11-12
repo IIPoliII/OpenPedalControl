@@ -46,26 +46,29 @@ SolidCompression=yes
 Name: "full"; Description: "Recommended"
 
 [Tasks]
-Name: "vjoy"; Description: "Install vJoy (free virtual controller driver)"; GroupDescription: "Custom curves need vJoy. Without it, OpenPedalControl can only store the Windows calibration: a curve with one bend, that works with the app closed. You can also install vJoy later with the link in the app."; Check: not IsVJoyInstalled
-Name: "startup"; Description: "Start OpenPedalControl with Windows (hidden in the notification area)"; GroupDescription: "Startup (only needed for custom curves; can be changed in the app):"; Flags: unchecked
+Name: "vjoy"; Description: "Install vJoy (free virtual controller driver)"; GroupDescription: "Custom curves need vJoy. Without it, OpenPedalControl can only store the Windows calibration: a curve with one bend, that works with the app closed. You can also install vJoy later from the app's Settings."; Check: not IsVJoyInstalled
+Name: "startup"; Description: "Start OpenPedalControl with Windows (hidden in the notification area)"; GroupDescription: "Startup (only needed for custom curves; can be changed in Settings):"; Flags: unchecked; Check: not IsUpgrade
+Name: "startmenuicon"; Description: "Create a Start menu shortcut"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "staging\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "staging\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "staging\README.md"; DestDir: "{app}"; Flags: ignoreversion
-; Kept so vJoy can also be installed later with the app's "Install vJoy" link.
+; Kept so vJoy can also be installed later from the app's Settings.
 Source: "staging\vJoySetup.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "staging\vJoy-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: startmenuicon
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\vJoySetup.exe"; Parameters: "/SILENT /NORESTART /SUPPRESSMSGBOXES"; StatusMsg: "Installing the vJoy driver..."; Tasks: vjoy; Flags: waituntilterminated
 ; "Start with Windows" belongs to the signed-in user, not the administrator account used for setup.
 Filename: "{app}\{#AppExe}"; Parameters: "--startup on"; Tasks: startup; Flags: runasoriginaluser waituntilterminated
+; After an update from inside the app (silent), start it again.
+Filename: "{app}\{#AppExe}"; Parameters: "--tray"; Flags: nowait runasoriginaluser; Check: WizardSilent
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallRun]
@@ -75,6 +78,11 @@ Filename: "{app}\{#AppExe}"; Parameters: "--startup off"; RunOnceId: "RemoveStar
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+function IsUpgrade: Boolean;
+begin
+  Result := RegKeyExists(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1');
+end;
+
 function IsVJoyInstalled: Boolean;
 begin
 #ifdef Preview

@@ -225,10 +225,8 @@
                               MinWidth="250" Height="30" VerticalContentAlignment="Center" AutomationProperties.Name="Device"/>
                     <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource HeaderButton}" Margin="8,0,0,0"
                             ToolTip="Look for connected controllers again and reload the selected one."/>
-                    <CheckBox IsChecked="{Binding StartWithWindows}" Foreground="White" VerticalAlignment="Center" Margin="18,0,0,0"
-                              ToolTip="Start hidden in the notification area when Windows starts. Only needed for the virtual controller (vJoy); the Windows calibration works with the app closed.">
-                        <TextBlock Text="Start with Windows" Foreground="White"/>
-                    </CheckBox>
+                    <Button Content="Settings" Click="OnSettingsClick" Style="{StaticResource HeaderButton}" Margin="8,0,0,0"
+                            ToolTip="Start with Windows, vJoy device and updates."/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -246,6 +244,18 @@
                         ToolTip="Windows calibration: stored in Windows for every game. Virtual controller: kept in OpenPedalControl's profile. Nothing is written to the pedals themselves."/>
                 <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" TextTrimming="CharacterEllipsis"
                            Foreground="{StaticResource TextMuted}" TextAlignment="Right" ToolTip="{Binding Status}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Update available -->
+        <Border DockPanel.Dock="Top" Background="#E8F0FE" BorderBrush="#C6D7FB" BorderThickness="0,0,0,1" Padding="24,8"
+                Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVisibility}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Update now" Command="{Binding InstallUpdateCommand}" Style="{StaticResource PrimaryButton}" Height="30"/>
+                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}">
+                    <Run Text="{Binding UpdateBannerText, Mode=OneWay}"/>
+                    <Run Text="{Binding UpdateStatus, Mode=OneWay}" FontWeight="Normal" Foreground="{StaticResource TextMuted}"/>
+                </TextBlock>
             </DockPanel>
         </Border>
 
@@ -298,8 +308,8 @@
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
-                        <Run Text="Custom curves need the free vJoy driver."/>
-                        <Hyperlink Click="OnInstallVJoyClick" Foreground="{StaticResource AccentBrush}">Install vJoy</Hyperlink>
+                        <Run Text="Virtual controller unavailable: custom curves need the free vJoy driver."/>
+                        <Hyperlink Click="OnSettingsClick" Foreground="{StaticResource AccentBrush}">Install it from Settings</Hyperlink>
                     </TextBlock>
                 </StackPanel>
             </StackPanel>

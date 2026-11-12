@@ -49,10 +49,25 @@ public partial class MainWindow : Window
         // A window handle is needed for plug/unplug notifications even while the window stays hidden.
         new WindowInteropHelper(this).EnsureHandle();
         _tray = new TrayIcon(ShowFromTray, ExitApp, () => _viewModel.StartWithWindows, v => _viewModel.StartWithWindows = v);
+        _viewModel.ExitForUpdate += (_, _) => ExitForUpdate();
         _viewModel.RefreshDevices();
         _liveTimer.Start();
         IsInitializedForUse = true;
+        _viewModel.CheckForUpdatesAtStartup();
         if (!hidden) Show();
+
+        string? updatedFrom = _viewModel.TakeUpdatedFromVersion();
+        if (updatedFrom == null) return;
+        if (hidden)
+        {
+            // Started in the tray (after an update or with Windows): a notification, the full log on click.
+            _tray.ShowMessage($"OpenPedalControl updated to {_viewModel.Version}",
+                "Click here to see what's new.", () => ShowChangelog(updatedFrom));
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(new Action(() => ShowChangelog(updatedFrom)), DispatcherPriority.ApplicationIdle);
+        }
     }
 
     public void ShowFromTray()
@@ -86,32 +101,18 @@ public partial class MainWindow : Window
         if (wizard.ShowDialog() == true) _viewModel.ApplyWizardResults(wizard.Results);
     }
 
-    /// <summary>The installer leaves the vJoy setup next to the exe so it can also be installed later.</summary>
-    private const string BundledVJoySetup = "vJoySetup.exe";
-
-    private void OnInstallVJoyClick(object sender, RoutedEventArgs e)
+    /// <summary>The "What's new" window; <paramref name="updatedFrom"/> highlights what changed since that version.</summary>
+    public void ShowChangelog(string? updatedFrom)
     {
-        string bundled = System.IO.Path.Combine(
-            System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "", BundledVJoySetup);
-        try
-        {
-            if (System.IO.File.Exists(bundled))
-            {
-                using System.Diagnostics.Process? setup = System.Diagnostics.Process.Start(
-                    new System.Diagnostics.ProcessStartInfo(bundled) { UseShellExecute = true, Verb = "runas" });
-                setup?.WaitForExit();
-                _viewModel.RefreshDevices(); // Picks up the freshly installed driver.
-            }
-            else
-            {
-                // Portable exe: send the user to the official vJoy release.
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(MainViewModel.VJoyDownloadUrl) { UseShellExecute = true });
-            }
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            // The administrator prompt was declined.
-        }
+        ShowFromTray();
+        new ChangelogWindow(_viewModel.Version, updatedFrom) { Owner = this }.ShowDialog();
+    }
+
+    private void OnSettingsClick(object sender, RoutedEventArgs e)
+    {
+        if (!IsVisible) ShowFromTray();
+        new SettingsWindow(_viewModel, () => ShowChangelog(null)) { Owner = this }.ShowDialog();
+        _viewModel.RefreshDevices(); // vJoy may have been installed meanwhile.
     }
 
     private void OnRemoveCalibrationClick(object sender, RoutedEventArgs e)
@@ -133,6 +134,14 @@ public partial class MainWindow : Window
         if (answer == MessageBoxResult.Yes) _viewModel.Save();
         else _viewModel.RevertUnsaved();
         return true;
+    }
+
+    /// <summary>The downloaded update waits for this process to end; unsaved edits are kept by saving them.</summary>
+    private void ExitForUpdate()
+    {
+        if (_viewModel.HasDevice && _viewModel.IsDirty) _viewModel.Save();
+        _exiting = true;
+        Close();
     }
 
     private void ExitApp()

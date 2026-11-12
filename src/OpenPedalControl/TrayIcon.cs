@@ -9,6 +9,7 @@ public sealed class TrayIcon : IDisposable
 {
     private readonly Forms.NotifyIcon _icon;
     private readonly Forms.ToolStripMenuItem _startWithWindows;
+    private Action? _balloonClicked;
 
     public TrayIcon(Action open, Action exit, Func<bool> getStartWithWindows, Action<bool> setStartWithWindows)
     {
@@ -29,14 +30,20 @@ public sealed class TrayIcon : IDisposable
             ContextMenuStrip = menu,
             Visible = true,
         };
+        _icon.BalloonTipClicked += (_, _) => _balloonClicked?.Invoke();
+        _icon.BalloonTipClosed += (_, _) => _balloonClicked = null;
         _icon.MouseClick += (_, e) =>
         {
             if (e.Button == Forms.MouseButtons.Left) open();
         };
     }
 
-    public void ShowMessage(string title, string text) =>
-        _icon.ShowBalloonTip(4000, title, text, Forms.ToolTipIcon.Info);
+    /// <summary>Shows a Windows notification. <paramref name="clicked"/> runs when the user clicks it.</summary>
+    public void ShowMessage(string title, string text, Action? clicked = null)
+    {
+        _balloonClicked = clicked;
+        _icon.ShowBalloonTip(6000, title, text, Forms.ToolTipIcon.Info);
+    }
 
     public void Dispose()
     {

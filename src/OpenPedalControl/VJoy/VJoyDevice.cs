@@ -7,13 +7,26 @@ using Microsoft.Win32;
 
 namespace OpenPedalControl.VJoy;
 
+public enum VJoyStatus
+{
+    /// <summary>Taken by this app.</summary>
+    Own = 0,
+    Free = 1,
+    /// <summary>Taken by another program.</summary>
+    Busy = 2,
+    /// <summary>Not set up in “Configure vJoy”.</summary>
+    Missing = 3,
+    Unknown = 4,
+}
+
 /// <summary>
 /// Minimal binding to vJoy (github.com/BrunnerInnovation/vJoy), a signed virtual joystick driver.
 /// vJoyInterface.dll is loaded from the vJoy installation, so nothing of vJoy ships with this app.
 /// </summary>
 public sealed class VJoyDevice : IDisposable
 {
-    public const uint DefaultDeviceId = 1;
+    /// <summary>vJoy supports up to 16 virtual devices.</summary>
+    public const uint MaxDevices = 16;
 
     private const string UninstallKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{8E31F76F-74C3-47F1-9550-E041EEDC5FBB}_is1";
 
@@ -57,12 +70,12 @@ public sealed class VJoyDevice : IDisposable
             return null;
         }
 
-        switch ((Status)Native.GetVJDStatus(id))
+        switch (GetStatus(id))
         {
-            case Status.Own:
-            case Status.Free:
+            case VJoyStatus.Own:
+            case VJoyStatus.Free:
                 break;
-            case Status.Busy:
+            case VJoyStatus.Busy:
                 problem = $"vJoy device {id} is in use by another program.";
                 return null;
             default:
@@ -88,6 +101,31 @@ public sealed class VJoyDevice : IDisposable
         }
         return device;
     }
+
+    public static VJoyStatus GetStatus(uint id)
+    {
+        if (!EnsureLoaded()) return VJoyStatus.Missing;
+        try { return (VJoyStatus)Native.GetVJDStatus(id); }
+        catch (Exception) { return VJoyStatus.Unknown; }
+    }
+
+    /// <summary>The vJoy devices that are set up, with who is using them.</summary>
+    public static IReadOnlyList<(uint id, VJoyStatus status)> ListDevices()
+    {
+        var list = new List<(uint id, VJoyStatus status)>();
+        if (!IsDriverAvailable) return list;
+        for (uint id = 1; id <= MaxDevices; id++)
+        {
+            VJoyStatus status = GetStatus(id);
+            if (status != VJoyStatus.Missing && status != VJoyStatus.Unknown) list.Add((id, status));
+        }
+        return list;
+    }
+
+    /// <summary>vJoy's own configuration tool, used to add devices or axes; null when not found.</summary>
+    public static string? ConfigToolPath => InstallFolders()
+        .Select(folder => Path.Combine(folder, Environment.Is64BitOperatingSystem ? "x64" : "x86", "vJoyConf.exe"))
+        .FirstOrDefault(File.Exists);
 
     public bool HasAxis(int usage) => _ranges.ContainsKey(usage);
 
@@ -145,14 +183,6 @@ public sealed class VJoyDevice : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr LoadLibrary(string fileName);
 
-    private enum Status
-    {
-        Own = 0,
-        Free = 1,
-        Busy = 2,
-        Missing = 3,
-        Unknown = 4,
-    }
 
     // Resolved against the vJoyInterface.dll already loaded by EnsureLoaded.
     private static class Native
