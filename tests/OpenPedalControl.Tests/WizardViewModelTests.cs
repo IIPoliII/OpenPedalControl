@@ -31,6 +31,35 @@ public class WizardViewModelTests
     }
 
     [Fact]
+    public void An_axis_silent_at_rest_takes_its_first_report_as_rest_rather_than_a_press()
+    {
+        var device = new FakeDevice();
+        var wizard = new WizardViewModel(device, device.CreateControls());
+
+        // Only X reported while released; Z (an inverted sensor resting high) reports later.
+        device.Set("X", RestX);
+        wizard.Tick();
+        wizard.Next();
+
+        device.Set("Z", 4000);
+        wizard.Tick();
+        Assert.False(wizard.CanGoNext); // Its first report is not a press.
+
+        foreach (int z in new[] { 3000, 1200, 900, 3990 })
+        {
+            device.Set("Z", z);
+            wizard.Tick();
+        }
+        Assert.True(wizard.CanGoNext);
+        wizard.Next();
+
+        WizardResult throttle = ResultFor(wizard, ControlKind.Throttle);
+        Assert.Same(device["Z"], throttle.Axis);
+        Assert.Equal(4000, throttle.Rest);
+        Assert.Equal(900, throttle.Full);
+    }
+
+    [Fact]
     public void Finds_the_axis_of_each_pedal_and_records_rest_and_furthest_position()
     {
         var device = new FakeDevice();

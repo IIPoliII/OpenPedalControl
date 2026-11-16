@@ -116,10 +116,14 @@ internal sealed class FirmwareProgrammer
         _log("Selected application image verified without writing flash.");
     }
 
+    /// <summary>True once <see cref="Program"/> has started erasing; before that the existing firmware is intact.</summary>
+    public bool FlashTouched { get; private set; }
+
     public void Program(FirmwareBackup backup, FirmwareImage image, Action<int> progress)
     {
         if (!_writable) throw new InvalidOperationException("Read-only firmware session.");
         Probe(backup); // Repeat the checks even after the separate review step.
+        FlashTouched = true; // From here the old application is gone until the new one is fully written.
         Command(0x32, new byte[] { 0, 0 });
         Verify(0, Enumerable.Repeat((byte)255, 512).ToArray());
         int done = 0;

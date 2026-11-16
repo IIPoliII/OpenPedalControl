@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 - 2026-11-16
+
+- The installer is now the only download; the portable exe is discontinued. A portable copy updating from inside the app opens the setup wizard instead.
+- App updates are signed with the OpenPedalControl release key and are only run when the signature verifies, in addition to GitHub's checksum. The installer is started without going through the command prompt, so unusual folder names no longer break updates.
+- Windows calibration: bottom and top deadzones (or brake max force) can no longer add up to 100 % or more, which used to swap the active range and invert the curve.
+- Uninstalling removes only the app's own files, never other files in the chosen folder, and removes "Start with Windows" for the user who enabled it even when an administrator account confirms the uninstall.
+- Unsaved edits are no longer lost silently: switching device or pressing Refresh asks first, and edits on a controller-firmware device survive a USB reconnection. Profile and settings files are replaced in one step, so a crash while saving cannot erase them.
+- Two identical controllers without a serial number keep separate Windows profiles while both are connected.
+- Guided calibration: an input that did not report during the release step no longer records a false rest position.
+- Firmware assistant: a failure before anything is written still returns the pedals to normal mode when the window is closed, and keeps Restart available. A device disappearing during the switch to update mode no longer aborts detection.
+
 ## 0.4.2 - 2026-11-16
 
 - Firmware is now included in the app: no separate download, ZIP extraction or manifest selection is needed. The portable exe contains the same tested pedal firmware 1.13.0.

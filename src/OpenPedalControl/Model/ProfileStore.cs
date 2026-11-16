@@ -23,6 +23,17 @@ public static class ProfileStore
         return Path.Combine(ProfileDirectory, name);
     }
 
+    /// <summary>
+    /// Stands in for a missing serial number: the USB instance part of a HID path
+    /// (\?\hid#vid_1209&amp;pid_0002#7&amp;1b2c3d&amp;0&amp;0000#{guid}), which Windows derives from the port.
+    /// </summary>
+    public static string PortKey(string hidPath)
+    {
+        string[] parts = (hidPath ?? "").Split('#');
+        string instance = parts.Length >= 3 ? parts[2] : hidPath ?? "";
+        return "port" + new string(instance.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+    }
+
     private static readonly object CacheLock = new object();
     private static readonly Dictionary<string, DeviceProfile?> Cache = new Dictionary<string, DeviceProfile?>(StringComparer.OrdinalIgnoreCase);
 
@@ -43,6 +54,9 @@ public static class ProfileStore
             return profile;
         }
     }
+
+    /// <summary>The profile as last saved on disk, bypassing unsaved edits in the shared copy. Null when none was saved.</summary>
+    public static DeviceProfile? ReadSaved(int vendorId, int productId, string serial) => Read(GetPath(vendorId, productId, serial));
 
     /// <summary>Makes a newly created profile the shared one for its device (not yet saved).</summary>
     public static void Adopt(DeviceProfile profile)
@@ -107,7 +121,8 @@ public static class ProfileStore
         {
             new DataContractJsonSerializer(typeof(DeviceProfile)).WriteObject(writer, profile);
         }
-        if (File.Exists(path)) File.Delete(path);
-        File.Move(temp, path);
+        // Swap the files in one step, so a crash never leaves the device without its profile.
+        if (File.Exists(path)) File.Replace(temp, path, null, true);
+        else File.Move(temp, path);
     }
 }

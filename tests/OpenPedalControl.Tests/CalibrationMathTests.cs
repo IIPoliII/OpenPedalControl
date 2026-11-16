@@ -21,6 +21,17 @@ public class CalibrationMathTests
     }
 
     [Fact]
+    public void Overlapping_deadzones_keep_the_released_edge_before_the_pressed_edge()
+    {
+        // 50 % + 80 % would cross; the top deadzone is shortened to 49 % so 0 % stays at the released end.
+        AxisCalibration c = CalibrationMath.Compute(0, 1000, 50, 80, 30, 0, 4095);
+        Assert.Equal(500, c.Min);
+        Assert.Equal(510, c.Max);
+        Assert.Equal(1.0, CalibrationMath.Travel(1000, 0, 1000, 50, 80));
+        Assert.Equal(0.0, CalibrationMath.Travel(500, 0, 1000, 50, 80));
+    }
+
+    [Fact]
     public void Midpoint_moves_the_center()
     {
         Assert.Equal(1000, CalibrationMath.Compute(0, 4000, 0, 0, 25, 0, 4095).Center);

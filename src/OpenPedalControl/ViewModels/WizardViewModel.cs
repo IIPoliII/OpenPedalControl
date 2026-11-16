@@ -77,6 +77,7 @@ public sealed class WizardViewModel : ObservableObject
 
     private readonly IAxisSource _reader;
     private readonly int[] _rest;
+    private readonly bool[] _restKnown;
     private readonly int[] _peakValue;
     private readonly int[] _peakDeviation;
     private readonly bool[] _taken;
@@ -91,6 +92,7 @@ public sealed class WizardViewModel : ObservableObject
         _reader = reader;
         int axes = reader.Axes.Count;
         _rest = new int[axes];
+        _restKnown = new bool[axes];
         _peakValue = new int[axes];
         _peakDeviation = new int[axes];
         _taken = new bool[axes];
@@ -142,6 +144,14 @@ public sealed class WizardViewModel : ObservableObject
         foreach (HidAxis axis in _reader.Axes)
         {
             if (_taken[axis.Index] || !_reader.TryGetValue(axis.Index, out int value)) continue;
+            if (!_restKnown[axis.Index])
+            {
+                // This axis had not reported while everything was released. Its first report is the best estimate
+                // of its rest position; counting it as a press would swap rest and full on a high-resting sensor.
+                _rest[axis.Index] = _peakValue[axis.Index] = value;
+                _restKnown[axis.Index] = true;
+                continue;
+            }
             int deviation = Math.Abs(value - _rest[axis.Index]);
             if (deviation > _peakDeviation[axis.Index])
             {
@@ -177,7 +187,10 @@ public sealed class WizardViewModel : ObservableObject
         if (_step == ReleaseStep)
         {
             foreach (HidAxis axis in _reader.Axes)
-                _rest[axis.Index] = _reader.TryGetValue(axis.Index, out int value) ? value : axis.LogicalMin;
+            {
+                _restKnown[axis.Index] = _reader.TryGetValue(axis.Index, out int value);
+                _rest[axis.Index] = _restKnown[axis.Index] ? value : axis.LogicalMin;
+            }
         }
         else if (IsPressStep)
         {

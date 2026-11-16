@@ -49,6 +49,7 @@ public partial class MainWindow : Window
         new WindowInteropHelper(this).EnsureHandle();
         _tray = new TrayIcon(ShowFromTray, ExitApp, () => _viewModel.StartWithWindows, v => _viewModel.StartWithWindows = v);
         _viewModel.ExitForUpdate += (_, _) => ExitForUpdate();
+        _viewModel.ResolveUnsavedEdits = () => ResolveUnsaved();
         _viewModel.RefreshDevices();
         _liveTimer.Start();
         IsInitializedForUse = true;

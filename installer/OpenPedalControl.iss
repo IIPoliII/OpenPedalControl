@@ -70,14 +70,35 @@ Filename: "{app}\{#AppExe}"; Parameters: "--startup on"; Tasks: startup; Flags: 
 Filename: "{app}\{#AppExe}"; Parameters: "--tray"; Flags: nowait runasoriginaluser; Check: WizardSilent
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
-[UninstallRun]
-Filename: "{app}\{#AppExe}"; Parameters: "--startup off"; RunOnceId: "RemoveStartup"; Flags: waituntilterminated runhidden
-
-[UninstallDelete]
-Type: filesandordirs; Name: "{app}"
+; The uninstaller removes only the files listed above. The folder goes only when it is empty, so a folder
+; shared with other files (for example C:\Tools) is never wiped.
 
 [Code]
 function IsUpgrade: Boolean;
 begin
   Result := RegKeyExists(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1');
+end;
+
+{ "Start with Windows" is a per-user Run value. The uninstaller runs elevated, possibly as another
+  (administrator) account, so look in every loaded user hive rather than only the current one, and remove
+  only entries that point at this installation. }
+procedure RemoveStartupEntries;
+var
+  Users: TArrayOfString;
+  I: Integer;
+  Key, Command, App: String;
+begin
+  App := Lowercase(ExpandConstant('{app}\{#AppExe}'));
+  if not RegGetSubkeyNames(HKU, '', Users) then Exit;
+  for I := 0 to GetArrayLength(Users) - 1 do
+  begin
+    Key := Users[I] + '\Software\Microsoft\Windows\CurrentVersion\Run';
+    if RegQueryStringValue(HKU, Key, '{#AppName}', Command) and (Pos(App, Lowercase(Command)) > 0) then
+      RegDeleteValue(HKU, Key, '{#AppName}');
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then RemoveStartupEntries;
 end;

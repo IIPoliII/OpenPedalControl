@@ -208,25 +208,31 @@ public partial class FirmwareWindow : Window
             MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
         await Operate(async () =>
         {
-            _checked = _resumeOnClose = false;
+            _checked = false;
             Status.Text = "Installing and checking firmware. Keep USB connected…";
             Progress.Visibility = Visibility.Visible;
             var progress = new Progress<int>(value => Progress.Value = value);
+            FirmwareProgrammer? programmer = null;
             try
             {
                 await Task.Run(() =>
                 {
                     using var usb = FirmwareUsb.OpenBootloader();
-                    var programmer = new FirmwareProgrammer(usb, true, Log);
+                    programmer = new FirmwareProgrammer(usb, true, Log);
                     programmer.Program(backup, image, value => ((IProgress<int>)progress).Report(value));
                     programmer.Run();
                 });
-                _writeFailed = false;
+                _resumeOnClose = _writeFailed = false;
                 await Task.Delay(1000);
                 DetectDevice();
                 Status.Text = "Firmware installed and verified. You can close this window.";
             }
-            catch { _writeFailed = true; throw; }
+            catch
+            {
+                // Until the first erase the existing firmware is intact: closing still restarts it normally.
+                if (programmer?.FlashTouched == true) { _resumeOnClose = false; _writeFailed = true; }
+                throw;
+            }
         });
     }
     private void RefreshButtons()

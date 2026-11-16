@@ -44,12 +44,22 @@ jobs:
         shell: pwsh
         run: ./installer/build-installer.ps1 -Version "${{ steps.version.outputs.value }}"
 
+      # The in-app updater only runs installers signed with the release key (secret UPDATE_SIGNING_KEY).
+      # Tag builds fail without it; other builds are signed when the secret is available.
+      - name: Sign installer
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if (-not $env:UPDATE_SIGNING_KEY -and $env:GITHUB_REF_TYPE -ne "tag") { Write-Host "No signing key; installer left unsigned."; exit 0 }
+          Get-ChildItem installer/output -Filter "OpenPedalControl-Setup-*.exe" | ForEach-Object { ./installer/sign-installer.ps1 -Installer $_.FullName }
+
       - name: Collect files
         shell: bash
         run: |
-          mkdir -p dist/portable
-          cp src/OpenPedalControl/bin/Release/net48/OpenPedalControl.exe LICENSE README.md dist/portable/
+          mkdir -p dist
           cp installer/output/OpenPedalControl-Setup-*.exe dist/
+          if compgen -G "installer/output/*.sig" > /dev/null; then cp installer/output/*.sig dist/; fi
 
       - uses: actions/upload-artifact@v7
         with:
@@ -75,11 +85,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
-          (cd portable && zip -r "../OpenPedalControl-${GITHUB_REF_NAME}-portable.zip" .)
           gh release create "$GITHUB_REF_NAME" \
             OpenPedalControl-Setup-*.exe \
-            "OpenPedalControl-${GITHUB_REF_NAME}-portable.zip" \
-            portable/OpenPedalControl.exe \
+            OpenPedalControl-Setup-*.exe.sig \
             --repo "$GITHUB_REPOSITORY" \
             --title "OpenPedalControl ${GITHUB_REF_NAME#v}" \
             --generate-notes \
