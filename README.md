@@ -5,6 +5,7 @@
 A small Windows tool to calibrate and tune first-generation sim racing pedals and handbrakes,
 including the original Heusinkveld Sim Pedals (`HE SIM PEDALS`) and Heusinkveld handbrake
 (Leo Bodnar BU0836-LC interface).
+<img width="1313" height="939" alt="image" src="https://github.com/user-attachments/assets/5b707bcb-79e7-4be9-9037-9e0202b3a344" />
 
 ## Features
 
