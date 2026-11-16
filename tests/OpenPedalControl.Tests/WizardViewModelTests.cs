@@ -137,6 +137,31 @@ public class WizardViewModelTests
     }
 
     [Fact]
+    public void Onboard_calibration_detects_mixed_directions_and_swapped_sensors_per_pedal()
+    {
+        var device = new FakeDevice(3);
+        var controls = device.CreateControls();
+        foreach (var control in controls) control.SetOutputMode(OutputMode.Onboard);
+        var wizard = new WizardViewModel(device, controls);
+        device.Report(500, 4000, 3700); wizard.Tick(); wizard.Next();
+        device.Set("Z", 2500); wizard.Tick(); device.Set("Z", 3700); wizard.Tick(); wizard.Next();
+        device.Set("Y", 2100); wizard.Tick(); device.Set("Y", 4000); wizard.Tick(); wizard.Next();
+        device.Set("X", 3200); wizard.Tick(); device.Set("X", 500); wizard.Tick(); wizard.Next();
+        foreach (var result in wizard.Results)
+        {
+            result.Control.ApplyMeasurement(result.Axis, result.Rest, result.Full);
+            result.Control.UpdateLive();
+            Assert.Equal(0, result.Control.OutputLevel, 6);
+            device.Set(result.Axis.Name, result.Full); result.Control.UpdateLive();
+            Assert.Equal(1, result.Control.OutputLevel, 6);
+        }
+        Assert.Same(device["Z"], ResultFor(wizard, ControlKind.Throttle).Axis);
+        Assert.True(ResultFor(wizard, ControlKind.Throttle).Control.IsInverted);
+        Assert.True(ResultFor(wizard, ControlKind.Brake).Control.IsInverted);
+        Assert.False(ResultFor(wizard, ControlKind.Clutch).Control.IsInverted);
+    }
+
+    [Fact]
     public void Skipping_everything_leaves_nothing_to_save()
     {
         var device = new FakeDevice();

@@ -8,13 +8,56 @@ Once saved, the profile is applied by the controller at power-up.
 The EFM8 application builds with SDCC. On one board, USB programming, DirectInput enumeration,
 three independent ADC inputs, profile readback and persistence across a software reset have been
 tested. Sixty raw/cooked sample comparisons with a saved nonlinear curve matched the desktop math.
-A physical power-cycle test after saving, full user calibration, suspend current and timing measurements
-remain to be completed. This version implements LC1–LC3. The four expansion axes, twelve switch
+Guided user calibration and persistence after a physical USB power cycle were subsequently verified.
+Suspend current and controlled-motion timing measurements remain pending. This version implements LC1–LC3. The four expansion axes, twelve switch
 inputs and the separate PIC-based BU0836-LC handbrake are outside this target.
 
 This is experimental bench firmware. The desktop release only updates the Windows app; it does not
 flash a device. The USB programming tools are pinned to the verified original backup of the bench
 unit and are not a generic installer for other controllers. Original firmware and backups are not included.
+
+The [specification audit](SPECS.md) distinguishes 12-bit ADC resolution from 16-bit HID fields,
+the nominal 4 ms USB report interval and CPU clocks. It records measured behavior and remaining
+differences, including the four auxiliary axes and twelve button inputs that are not implemented.
+
+## Desktop USB firmware assistant
+
+Available in OpenPedalControl 0.4.0 and later, through **Settings → Pedal firmware…**. It uses
+Windows HID directly; Python and a C2 adapter are not needed for this USB workflow. It currently
+requires the verified bench-board backup. Other boards and the PIC handbrake are rejected.
+
+1. Save or discard any pending edits before opening the assistant. Device monitoring pauses during maintenance.
+2. Extract the firmware bundle ZIP into a folder. Select `pedals.firmware.json`, next to `pedals.ihx`.
+   The build below creates these two files. Select the original backup folder containing
+   `program-0000-3fff.bin` and `nonvolatile-f800-fbff.bin`. Both hashes must match the verified backup.
+3. Click **Verify files**. Check the version, target, hash and declared specifications. The app checks
+   the HEX checksum, application address range, reset vector, manifest target and profile compatibility.
+   A manifest is build metadata, not a digital signature or proof that an arbitrary image is trustworthy.
+4. Original firmware: hold FW/reset while reconnecting USB, then release. With our firmware,
+   **Enter update mode** requests the preserved bootloader in software.
+5. Click **Check controller**. This checks chip ID `0x3241`, bootloader version `0x90`, and CRCs of the
+   bootloader and protection pages against the backup. It sets protocol RAM state but sends no erase,
+   program or lock command.
+6. **Install verified firmware…** shows a final confirmation for the exact reviewed image. Keep USB
+   connected. All 29 application pages are replaced; the reset-vector first byte is activated last.
+   Image and protected-region CRCs must pass before the assistant requests a restart. Custom updates
+   preserve user-data pages and therefore the saved profile when using profile version 1.
+7. Close the assistant after completion, check each pedal in the app and `joy.cpl`, then calibrate/save
+   as needed. A firmware version change does not itself measure correct sensor endpoints.
+
+**Restore original:** select the restoration checkbox and your backup folder. The app builds the
+restoration plan from the verified backup in memory, replacing the original application and all fourteen
+user-data pages at `0xF800–0xFB7F`. It preserves the bootloader and protection pages. Actual restoration
+writing remains untested on hardware; it is covered by the simulated flash tests.
+
+The session log is in `%LOCALAPPDATA%\OpenPedalControl\firmware-sessions`. There are no automatic
+retries or restart attempts after a failed write. **Restart controller** requires a read-only CRC match
+against the selected complete image. Reconnect holding FW/reset for a new recovery attempt. The
+assistant cannot repair an erased/damaged bootloader; that still needs a C2 programmer.
+
+The native assistant's software boot entry, read-only full-image/protected-region verification, restart and
+unchanged saved calibration were checked on the real board. Its write engine has passed simulation,
+including disconnects before and after every command. A real write through this new UI is still pending.
 
 ## Building for a board
 

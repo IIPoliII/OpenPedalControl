@@ -37,6 +37,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private DeviceEntry? _selectedDevice;
     private bool _updatingDeviceList;
     private bool _isDirty;
+    private bool _firmwareMaintenance;
     private string _status = "";
     private string _deviceSummary = "";
     private readonly AppSettings _settings = AppSettings.Load();
@@ -246,6 +247,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Re-reads the list of connected controllers. The open device is kept unless it vanished.</summary>
     public void RefreshDevices(bool reload = false)
     {
+        if (_firmwareMaintenance) return;
         List<GameController> controllers;
         try
         {
@@ -455,6 +457,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
         foreach (ControlViewModel control in Controls) control.UpdateLive();
+    }
+
+    public void BeginFirmwareMaintenance()
+    {
+        _firmwareMaintenance = true;
+        CloseDevice();
+        NotifyDeviceChanged();
+    }
+
+    public void EndFirmwareMaintenance()
+    {
+        _firmwareMaintenance = false;
+        RefreshDevices(true);
     }
 
     // --- Settings -----------------------------------------------------------------------------------

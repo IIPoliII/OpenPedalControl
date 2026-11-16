@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Product>OpenPedalControl</Product>
     <Description>Calibration and tuning tool for legacy sim racing pedals and handbrakes.</Description>
     <Copyright>MIT License</Copyright>

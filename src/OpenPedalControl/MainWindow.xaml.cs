@@ -112,7 +112,7 @@ public partial class MainWindow : Window
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         if (!IsVisible) ShowFromTray();
-        new SettingsWindow(_viewModel, () => ShowChangelog(null)) { Owner = this }.ShowDialog();
+        new SettingsWindow(_viewModel, () => ShowChangelog(null), owner => ResolveUnsaved(owner)) { Owner = this }.ShowDialog();
     }
 
     private void OnRemoveCalibrationClick(object sender, RoutedEventArgs e)
@@ -128,10 +128,10 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Asks about unsaved settings. Returns false when the user cancelled.</summary>
-    private bool ResolveUnsaved()
+    private bool ResolveUnsaved(Window? dialogOwner = null)
     {
         if (!IsVisible || !_viewModel.HasDevice || !_viewModel.IsDirty) return true;
-        MessageBoxResult answer = MessageBox.Show(this,
+        MessageBoxResult answer = MessageBox.Show(dialogOwner ?? this,
             "Some settings are not saved yet.\n\nSave them now?",
             "OpenPedalControl", MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes);
         if (answer == MessageBoxResult.Cancel) return false;

@@ -51,6 +51,15 @@ sur une carte ; la réécriture de l'original reste à valider.
 
 ## Outil USB de transfert et de restauration
 
+Depuis la version 0.4.0 de l'application, **Settings → Pedal firmware…** propose un assistant USB
+natif sans Python : sélection du paquet `pedals.firmware.json` avec son image, contrôle de la
+sauvegarde et de la carte, puis confirmation avant écriture. Il propose aussi la restauration de
+l'application originale depuis la sauvegarde locale. Voir les [étapes et limites](../README.md#desktop-usb-firmware-assistant)
+et le [comparatif des spécifications](../SPECS.md). La calibration détecte séparément le sens de
+chaque capteur ; une valeur relâchée proche de 4000 n'est pas une pédale enfoncée après calibration.
+
+Les commandes ci-dessous restent disponibles pour le travail sur banc.
+
 L’outil Python fonctionne sous Windows sans paquet externe. Il cible uniquement le pédalier
 HE SIM PEDALS sauvegardé, avec le bootloader HID `10C4:8B02`, l’identifiant de puce `0x3241`
 et la version de bootloader `0x90`. Le frein à main PIC n’est jamais sélectionné.
@@ -106,7 +115,8 @@ Un bootloader endommagé demanderait toujours une restauration par C2.
 Sur une carte d’essai équipée du même composant et d’entrées connues, vérifier d’abord que Windows détecte **OpenPedalControl Pedals**. Dans le logiciel, actionner chaque entrée séparément, régler les bornes et appliquer une courbe reconnaissable. Contrôler les trois axes dans `joy.cpl`, fermer le logiciel, débrancher puis rebrancher, et contrôler de nouveau les axes et la relecture du profil. L'énumération DirectInput, les trois entrées indépendantes, la relecture du profil et sa persistance
 après redémarrage logiciel ont été contrôlées sur la carte. Une courbe non linéaire sauvegardée a produit
 60 échantillons conformes au calcul PC. La coupure d'alimentation après sauvegarde et la calibration
-complète par l'utilisateur restent à vérifier.
+complète par l'utilisateur ont ensuite été vérifiées : les trois voies ont des bornes inversées,
+et le profil est resté identique après débranchement/rebranchement de l'USB.
 
 En veille USB, le prototype laisse le processeur et l’ADC alimentés. Le courant du montage en veille et la reprise après suspension de Windows restent à mesurer sur le banc.
 

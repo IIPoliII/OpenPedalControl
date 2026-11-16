@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "opc.h"
+#include "version.h"
 
 // EFM8UB1 reference manual, SFR map. USB configuration and port 2 use page 0x20.
 __sfr __at (0x97) WDTCN;

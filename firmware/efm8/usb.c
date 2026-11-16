@@ -44,13 +44,13 @@ typedef char report_descriptor_fits_control_packet[(sizeof(report_descriptor) < 
 static const __code uint8_t device_descriptor[] = {
     18, 1, 0x00, 0x02, 0, 0, 0, 64,
     OPC_USB_VID & 255, OPC_USB_VID >> 8, OPC_USB_PID & 255, OPC_USB_PID >> 8,
-    0x13, 1, 2, 1, 3, 1                   // bcdDevice 1.13, explicit axis usages
+    OPC_BCD(OPC_VERSION_MINOR), OPC_BCD(OPC_VERSION_MAJOR), 2, 1, 3, 1
 };
 static const __code uint8_t configuration_descriptor[] = {
     9, 2, 34, 0, 1, 1, 0, 0x80, 50,         // bus powered, 100 mA maximum
     9, 4, 0, 0, 1, 3, 0, 0, 0,              // HID with no boot protocol
     9, 0x21, 0x11, 0x01, 0, 1, 0x22, sizeof(report_descriptor), 0,
-    7, 5, 0x81, 3, 64, 0, 4              // Original 64-byte endpoint, 4 ms interval
+    7, 5, 0x81, 3, 64, 0, OPC_USB_INTERVAL_MS
 };
 static const __code uint8_t languages[] = {4, 3, 9, 4};
 static const __code uint8_t serial[] = {
@@ -318,7 +318,7 @@ void usb_poll(void)
     if (reg_read(IN1INT) & 1) service_control();
     if (!configured || halted) return;
     frame = reg_read(FRAME_LOW);
-    if ((uint8_t)(frame - last_frame) < 4) return;
+    if ((uint8_t)(frame - last_frame) < OPC_USB_INTERVAL_MS) return;
     last_frame = frame;
     if (elapsed_idle != 255) elapsed_idle++;
     reg_write(INDEX, 1);

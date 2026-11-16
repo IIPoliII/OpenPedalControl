@@ -14,6 +14,8 @@ including the original Heusinkveld Sim Pedals (`HE SIM PEDALS`) and Heusinkveld 
 - Six-point curves and presets stored on controllers running the experimental OpenPedalControl pedal firmware.
 - Live raw sensor readings and a preview of the settings being edited.
 - GitHub update checks, verified downloads and an embedded changelog.
+- A USB firmware assistant under **Settings → Pedal firmware…** for the verified EFM8 bench board:
+  inspect, install/update or restore the original application from your local backup.
 
 Saved settings work with the app closed. No virtual controller or extra driver is required.
 
@@ -46,8 +48,11 @@ calibrate again. Profiles are kept in `%APPDATA%\OpenPedalControl\profiles`.
 for each pedal, including inverted sensors, then use **Save to controller**. The game receives the saved
 curve directly from the physical controller. Unsaved edits are shown as a preview.
 
-The app update does **not** flash a controller. The [experimental firmware and hardware notes](firmware/README.md)
-are for the EFM8 pedal board only. The PIC handbrake stays on its original firmware.
+The app update does **not** flash a controller. Firmware installation is a separate, explicitly confirmed
+operation under **Settings → Pedal firmware…**. It needs a versioned firmware bundle and the verified
+original backup. The assistant currently accepts the single bench board's backup only; it does not
+extract original firmware or support arbitrary boards. See the [USB assistant instructions](firmware/README.md#desktop-usb-firmware-assistant)
+and [original-versus-custom specification audit](firmware/SPECS.md). The PIC handbrake stays on its original firmware.
 
 Version 0.3.0 removes virtual output and its bundled driver. Older virtual profiles open in Windows mode;
 the six-point curve cannot be applied by Windows, which uses the stored midpoint instead. Save to Windows
@@ -67,6 +72,12 @@ This app is intended for pedals and levers, rather than self-centering steering 
 
 **Settings** contains optional startup in the notification area, update checks and **What's new**.
 Neither output mode needs the app to start with Windows or run while driving.
+
+An uncalibrated controller starts with generic endpoints 0 and 4092. If released readings are already
+near 4000, its preview can be near 100% before calibration. The wizard measures each pedal's real
+endpoints and independently handles values that decrease under pressure. Use a small bottom deadzone
+if sensor noise causes a few counts of output at rest. Mapping changes and curves take effect in games
+only after **Save to controller**.
 
 ## Supported devices
 
@@ -90,7 +101,7 @@ The app is built in `src/OpenPedalControl/bin/Release/net48/`. The installer add
 [Inno Setup 6](https://jrsoftware.org/isinfo.php):
 
 ```powershell
-./installer/build-installer.ps1 -Version 0.3.0
+./installer/build-installer.ps1 -Version 0.4.0
 ```
 
 Pushing a version tag makes GitHub Actions build, test and publish the app. Add the release to

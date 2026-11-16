@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 - 2026-11-16
+
+- Settings now includes a USB pedal firmware assistant: select a versioned firmware bundle and the verified original backup, check the controller, then review and explicitly confirm installation. No Python or external programmer is needed.
+- Custom updates preserve profile data, the original bootloader and protection pages. The assistant can also restore the original application and user settings from the local backup. It currently supports the verified EFM8 bench board only; the PIC handbrake is excluded.
+- Image integrity, target, profile format, ADC mapping and declared specifications are checked before USB operations. Chip identity and protected-region CRCs are checked before programming and again afterward. A failed session never retries or restarts automatically.
+- Published a specification audit distinguishing 12-bit sensor resolution, 16-bit USB fields, the 4 ms report interval and CPU clocks. Guided calibration already handles inverted sensors independently; a regression test now also covers mixed directions and swapped sensor wiring.
+- Firmware 1.13.0 remains the tested bench application. The assistant changes the update workflow; it does not silently install a new device firmware or increase its resolution or report rate.
+
 ## 0.3.0 - 2026-11-16
 
 - New controller firmware mode: read and save calibration, sensor assignments, deadzones, brake max force and six-point curves directly on supported OpenPedalControl pedal firmware. Saved settings work with the app closed.

@@ -1,7 +1,10 @@
 """Build the EFM8UB10F16G-QFN28 application using SDCC/MCS-51."""
 
 import argparse
+import hashlib
+import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -60,6 +63,17 @@ def main():
         objects.append(obj)
     subprocess.run([*command, *objects, "-o", "pedals.ihx"], cwd=out, env=tool_env, check=True)
     report = inspect_file(out / "pedals.ihx", code_limit=BUILD_LIMIT)
+    if not args.diagnostic_no_feature:
+        version_text = (here / "version.h").read_text(encoding="ascii")
+        version = ".".join(re.search(r"#define OPC_VERSION_" + part + r"\s+(\d+)\b", version_text).group(1)
+                           for part in ("MAJOR", "MINOR", "PATCH"))
+        def setting(name):
+            return int(re.search(r"#define OPC_" + name + r"\s+(\d+)\b", version_text).group(1))
+        manifest = dict(schema=1, target="HE_SIM_PEDALS_EFM8UB10F16G_QFN28", version=version,
+                        image="pedals.ihx", sha256=hashlib.sha256((out / "pedals.ihx").read_bytes()).hexdigest(),
+                        profile_version=1, adc_bits=setting("ADC_BITS"), usb_interval_ms=setting("USB_INTERVAL_MS"), axes=3,
+                        cpu_hz=setting("SYSCLK_HZ"), vid=args.vid, pid=args.pid, adc_mux=list(args.mux))
+        (out / "pedals.firmware.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"Image checked: {report['data_bytes']} bytes, code ends before {report['code_end_exclusive']}; bootloader and security pages excluded")
     print(f"LC1, LC2, LC3 ADC0MX: {', '.join(map(str, args.mux))}")
     print(out / "pedals.ihx")
