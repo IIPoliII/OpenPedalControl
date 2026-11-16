@@ -23,11 +23,11 @@ Saved settings work with the app closed. No virtual controller or extra driver i
 
 From the [latest release](https://github.com/IIPoliII/OpenPedalControl/releases/latest):
 
-- **`OpenPedalControl-Setup-x.y.z.exe`** installs the app and shortcuts.
-- **`OpenPedalControl.exe`** is the portable app. The portable ZIP also includes this README and the license.
+- **`OpenPedalControl-Setup-x.y.z.exe`** installs the app and shortcuts. It is the only download; there is no
+  portable version from 0.5.0 on.
 
-Windows 10 or 11 (64-bit), with the Windows .NET Framework 4.8. Versions 0.2.0 and later can
-update through **Settings → Check now**. From 0.1.0, download the new release manually.
+Windows 10 or 11 (64-bit), with the Windows .NET Framework 4.8. Installed versions 0.2.0 and later can
+update through **Settings → Check now**. From 0.1.0 or a portable copy, download and run the installer once.
 
 ## Where settings are saved
 

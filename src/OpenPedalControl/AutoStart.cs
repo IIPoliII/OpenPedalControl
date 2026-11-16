@@ -30,7 +30,7 @@ public static class AutoStart
         else key.DeleteValue(ValueName, false);
     }
 
-    /// <summary>Keeps the entry pointing at this exe after the portable app was moved.</summary>
+    /// <summary>Keeps the entry pointing at this exe if the app was moved or reinstalled elsewhere.</summary>
     public static void RepairPath()
     {
         try

@@ -33,6 +33,20 @@ public static class CalibrationMath
     public const double MinMidpointPercent = 5;
     public const double MaxMidpointPercent = 95;
 
+    /// <summary>Bottom plus top deadzone never exceeds this, so the released edge stays before the pressed edge.</summary>
+    public const double MaxCombinedDeadzonePercent = 99;
+
+    /// <summary>
+    /// Clamps both deadzones and, when together they would leave no travel, shortens the top one first.
+    /// </summary>
+    public static (double Bottom, double Top) ClampDeadzones(double bottomPercent, double topPercent)
+    {
+        double bottom = Clamp(bottomPercent, 0, MaxDeadzonePercent);
+        double top = Clamp(topPercent, 0, MaxDeadzonePercent);
+        if (bottom + top > MaxCombinedDeadzonePercent) top = Math.Max(0, MaxCombinedDeadzonePercent - bottom);
+        return (bottom, top);
+    }
+
     /// <summary>
     /// Turns pedal settings into a Windows axis calibration.
     /// </summary>
@@ -45,8 +59,9 @@ public static class CalibrationMath
         double midpointPercent, int logicalMin, int logicalMax)
     {
         double travel = rawFull - rawRest;
-        double restEdge = rawRest + travel * Clamp(bottomPercent, 0, MaxDeadzonePercent) / 100.0;
-        double fullEdge = rawFull - travel * Clamp(topPercent, 0, MaxDeadzonePercent) / 100.0;
+        (double bottom, double top) = ClampDeadzones(bottomPercent, topPercent);
+        double restEdge = rawRest + travel * bottom / 100.0;
+        double fullEdge = rawFull - travel * top / 100.0;
         double mid = restEdge + (fullEdge - restEdge) * Clamp(midpointPercent, MinMidpointPercent, MaxMidpointPercent) / 100.0;
 
         // DirectInput needs min < center < max, whatever the direction of the axis.
@@ -73,8 +88,9 @@ public static class CalibrationMath
     public static double Travel(int raw, int rawRest, int rawFull, double bottomPercent, double topPercent)
     {
         double travel = rawFull - rawRest;
-        double restEdge = rawRest + travel * Clamp(bottomPercent, 0, MaxDeadzonePercent) / 100.0;
-        double fullEdge = rawFull - travel * Clamp(topPercent, 0, MaxDeadzonePercent) / 100.0;
+        (double bottom, double top) = ClampDeadzones(bottomPercent, topPercent);
+        double restEdge = rawRest + travel * bottom / 100.0;
+        double fullEdge = rawFull - travel * top / 100.0;
         double span = fullEdge - restEdge;
         if (Math.Abs(span) < 1) return (raw - restEdge) * (travel < 0 ? -1 : 1) > 0 ? 1 : 0;
         return Clamp((raw - restEdge) / span, 0, 1);

@@ -13,7 +13,7 @@ public sealed class FirmwareMaintenanceTests
     {
         using var vm = new MainViewModel();
         typeof(MainViewModel).GetField("_update", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(vm, new UpdateInfo(new Version(99, 0, 0), "v99.0.0", "", null, null, null, null));
+            .SetValue(vm, new UpdateInfo(new Version(99, 0, 0), "v99.0.0", "", null, null));
         Assert.True(vm.InstallUpdateCommand.CanExecute(null));
         Assert.True(vm.BeginFirmwareMaintenance());
         Assert.True(vm.IsFirmwareMaintenance);

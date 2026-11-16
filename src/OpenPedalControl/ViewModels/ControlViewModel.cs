@@ -168,8 +168,11 @@ public sealed class ControlViewModel : ObservableObject
         : "Share of the travel ignored at the fully pressed end, so 100 % is always reached.";
     public double TopMinimum => UsesMaxForce ? 100 - TopLimit : 0;
     public double TopMaximum => UsesMaxForce ? 100 : TopLimit;
-    private double TopLimit => _mode == OutputMode.Onboard ? Math.Min(90, 99 - Settings.BottomDeadzone) : 80;
-    public double BottomMaximum => _mode == OutputMode.Onboard ? Math.Min(90, 99 - Settings.TopDeadzone) : 50;
+    // Both editors keep the sum of the deadzones below 100 %, otherwise the released and pressed edges cross.
+    private double TopLimit => Math.Max(0, Math.Min(_mode == OutputMode.Onboard ? 90 : 80,
+        CalibrationMath.MaxCombinedDeadzonePercent - Settings.BottomDeadzone));
+    public double BottomMaximum => Math.Max(0, Math.Min(_mode == OutputMode.Onboard ? 90 : 50,
+        CalibrationMath.MaxCombinedDeadzonePercent - Settings.TopDeadzone));
 
     public double TopValue
     {

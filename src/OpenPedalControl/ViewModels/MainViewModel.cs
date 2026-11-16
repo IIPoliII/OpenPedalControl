@@ -34,6 +34,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private GameController? _controller;
     private DeviceProfile? _profile;
     private string _savedSnapshot = "";
+    private string _profileKey = "";
     private DeviceEntry? _selectedDevice;
     private bool _updatingDeviceList;
     private bool _isDirty;
@@ -44,12 +45,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private UpdateInfo? _update;
     private string _updateStatus = "";
     private bool _updateBusy;
+    private (string HidPath, DeviceProfile Profile)? _carryOver;
+
+    /// <summary>
+    /// Asks the window what to do with unsaved edits before another device is opened or the device is reloaded.
+    /// Returns false to stay on the current device. Without a handler, edits are kept only when nothing is unsaved.
+    /// </summary>
+    public Func<bool>? ResolveUnsavedEdits { get; set; }
+
+    private bool ConfirmLeaveDevice() => !HasDevice || !IsDirty || (ResolveUnsavedEdits?.Invoke() ?? true);
 
     public MainViewModel()
     {
         SaveCommand = new RelayCommand(Save, () => HasDevice && IsDirty);
         ResetCommand = new RelayCommand(ResetTuning, () => HasDevice);
-        RefreshCommand = new RelayCommand(() => RefreshDevices(true));
+        RefreshCommand = new RelayCommand(() =>
+        {
+            if (ConfirmLeaveDevice()) RefreshDevices(true);
+        });
         OpenGameControllersCommand = new RelayCommand(() => Open("control.exe", "joy.cpl"));
         CheckUpdatesCommand = new RelayCommand(() => _ = CheckForUpdatesAsync(true), () => !_updateBusy);
         InstallUpdateCommand = new RelayCommand(() => _ = InstallUpdateAsync(), () => _update != null && !_updateBusy && !_firmwareMaintenance);
@@ -72,7 +85,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string CurrentVersionText => "Installed: " + Version + (Updater.IsInstalled ? "" : " (portable)");
+    public string CurrentVersionText => "Installed: " + Version;
     public string UpdateStatus { get => _updateStatus; private set => Set(ref _updateStatus, value); }
     public bool UpdateAvailable => _update != null;
     public bool CanMaintainFirmware => !_updateBusy && !_firmwareMaintenance;
@@ -183,6 +196,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set
         {
             if (ReferenceEquals(value, _selectedDevice)) return;
+            if (!_updatingDeviceList && !ConfirmLeaveDevice())
+            {
+                // The list box already shows the new choice; put it back once its own update has finished.
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() => Raise(nameof(SelectedDevice))));
+                return;
+            }
             _selectedDevice = value;
             Raise();
             if (!_updatingDeviceList) LoadDevice(value);
@@ -341,21 +360,48 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 return;
             }
         }
-        else saved = ProfileStore.Load(reader.VendorId, reader.ProductId, reader.Serial);
+        else
+        {
+            _profileKey = ProfileKeyOf(entry.Controller, reader);
+            saved = ProfileStore.Load(reader.VendorId, reader.ProductId, _profileKey);
+        }
+
+        // "Saved" is what the controller or the profile file holds, not the shared in-memory profile, which may
+        // carry edits from before the device was re-plugged.
+        DeviceProfile? stored = reader.IsOnboard ? saved : ProfileStore.ReadSaved(reader.VendorId, reader.ProductId, _profileKey);
+
+        // Unsaved edits of an onboard controller survive a USB reconnection of the same device.
+        (string HidPath, DeviceProfile Profile)? carry = _carryOver;
+        _carryOver = null;
+        if (reader.IsOnboard && saved != null && carry is { } c &&
+            string.Equals(c.HidPath, entry.Controller.HidPath, StringComparison.OrdinalIgnoreCase) &&
+            c.Profile.VendorId == saved.VendorId && c.Profile.ProductId == saved.ProductId && c.Profile.Serial == saved.Serial)
+        {
+            saved = c.Profile;
+        }
+
         bool imported = false;
         if (saved == null)
         {
             _profile = CreateProfile(entry.Controller, reader, out imported);
             ProfileStore.Adopt(_profile);
+            stored = _profile;
         }
         else
         {
             _profile = saved;
         }
         // Profiles from the removed virtual output mode now use the real device.
-        _profile.Output = (IsOnboardMode ? OutputMode.Onboard : OutputMode.Windows).ToString();
+        string output = (IsOnboardMode ? OutputMode.Onboard : OutputMode.Windows).ToString();
+        _profile.Output = output;
         _profile.DeviceName = entry.Controller.Name;
-        _savedSnapshot = ProfileStore.Snapshot(_profile);
+        if (stored != null && !ReferenceEquals(stored, _profile))
+        {
+            stored.Output = output;
+            stored.DeviceName = entry.Controller.Name;
+        }
+        // A profile that only ever existed in memory has nothing saved yet.
+        _savedSnapshot = stored == null ? "" : ProfileStore.Snapshot(stored);
         OutputMode mode = IsOnboardMode ? OutputMode.Onboard : OutputMode.Windows;
 
         var options = new List<AxisOption> { new AxisOption(null) };
@@ -394,6 +440,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         NotifyDeviceChanged();
     }
 
+    /// <summary>
+    /// Names the profile file of a device in Windows mode. Normally its USB serial number. Identical controllers
+    /// without one would share a file, so while two of them are connected each is told apart by its USB port.
+    /// </summary>
+    private string ProfileKeyOf(GameController controller, HidDeviceReader reader)
+    {
+        if (!string.IsNullOrEmpty(reader.Serial)) return reader.Serial;
+        bool twin = Devices.Count(d => d.Controller.VendorId == controller.VendorId && d.Controller.ProductId == controller.ProductId) > 1;
+        return twin ? ProfileStore.PortKey(controller.HidPath) : "";
+    }
+
     private DeviceProfile CreateProfile(GameController controller, HidDeviceReader reader, out bool imported)
     {
         var profile = new DeviceProfile
@@ -401,7 +458,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             DeviceName = controller.Name,
             VendorId = reader.VendorId,
             ProductId = reader.ProductId,
-            Serial = reader.Serial,
+            Serial = reader.IsOnboard ? reader.Serial : _profileKey,
             Controls = DeviceTemplates.CreateDefault(controller.Name, reader.VendorId, reader.ProductId, reader.Axes),
         };
 
@@ -435,6 +492,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _controller = null;
         _profile = null;
         _savedSnapshot = "";
+        _profileKey = "";
         Controls.Clear();
         DeviceSummary = "";
         IsDirty = false;
@@ -455,6 +513,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_reader == null) return;
         if (_reader.IsClosed)
         {
+            if (IsDirty && IsOnboardMode && _profile != null && _controller != null) _carryOver = (_controller.HidPath, _profile);
             RefreshDevices(true);
             if (_reader == null) Status = "Device disconnected.";
             return;
@@ -574,7 +633,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void RevertUnsaved()
     {
         if (_reader == null) return;
-        if (!IsOnboardMode) ProfileStore.Forget(_reader.VendorId, _reader.ProductId, _reader.Serial);
+        if (!IsOnboardMode) ProfileStore.Forget(_reader.VendorId, _reader.ProductId, _profileKey);
         LoadDevice(_selectedDevice);
     }
 
@@ -610,7 +669,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 if (control.Axis is HidAxis axis)
                     _directInput.SetCalibration(_controller.InstanceGuid, axis.UsagePage, axis.Usage, DefaultCalibration(axis));
             }
-            ProfileStore.Delete(_reader.VendorId, _reader.ProductId, _reader.Serial);
+            ProfileStore.Delete(_reader.VendorId, _reader.ProductId, _profileKey);
         }
         catch (Exception ex)
         {

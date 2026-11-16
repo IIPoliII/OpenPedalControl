@@ -46,8 +46,14 @@ public sealed class AppSettings
     public void Save()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        using FileStream stream = File.Create(FilePath);
-        using var writer = JsonReaderWriterFactory.CreateJsonWriter(stream, new UTF8Encoding(false), false, true, "  ");
-        new DataContractJsonSerializer(typeof(AppSettings)).WriteObject(writer, this);
+        string temp = FilePath + ".tmp";
+        using (FileStream stream = File.Create(temp))
+        using (var writer = JsonReaderWriterFactory.CreateJsonWriter(stream, new UTF8Encoding(false), false, true, "  "))
+        {
+            new DataContractJsonSerializer(typeof(AppSettings)).WriteObject(writer, this);
+        }
+        // Swap in one step, so a crash while saving never leaves an empty settings file.
+        if (File.Exists(FilePath)) File.Replace(temp, FilePath, null, true);
+        else File.Move(temp, FilePath);
     }
 }

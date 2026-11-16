@@ -47,8 +47,7 @@ jobs:
       - name: Collect files
         shell: bash
         run: |
-          mkdir -p dist/portable
-          cp src/OpenPedalControl/bin/Release/net48/OpenPedalControl.exe LICENSE README.md dist/portable/
+          mkdir -p dist
           cp installer/output/OpenPedalControl-Setup-*.exe dist/
 
       - uses: actions/upload-artifact@v7
@@ -75,11 +74,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
-          (cd portable && zip -r "../OpenPedalControl-${GITHUB_REF_NAME}-portable.zip" .)
           gh release create "$GITHUB_REF_NAME" \
             OpenPedalControl-Setup-*.exe \
-            "OpenPedalControl-${GITHUB_REF_NAME}-portable.zip" \
-            portable/OpenPedalControl.exe \
             --repo "$GITHUB_REPOSITORY" \
             --title "OpenPedalControl ${GITHUB_REF_NAME#v}" \
             --generate-notes \

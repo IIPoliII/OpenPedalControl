@@ -95,19 +95,24 @@ internal sealed class FirmwareUsb : IFirmwareTransport
                     if (Marshal.GetLastWin32Error() != 259) throw new Win32Exception(Marshal.GetLastWin32Error());
                     break;
                 }
+                // A device that is just leaving or arriving (the pedals reset into update mode) can fail any of
+                // these queries. Skip it for this pass rather than failing the whole scan; callers poll again.
                 SetupDiGetDeviceInterfaceDetail(devices, ref info, IntPtr.Zero, 0, out uint needed, IntPtr.Zero);
-                if (needed < 8 || needed > 65536) throw new IOException("Invalid HID path size.");
+                if (needed < 8 || needed > 65536) continue;
                 IntPtr detail = Marshal.AllocHGlobal((int)needed);
                 try
                 {
                     Marshal.WriteInt32(detail, IntPtr.Size == 8 ? 8 : 6);
-                    if (!SetupDiGetDeviceInterfaceDetail(devices, ref info, detail, needed, out _, IntPtr.Zero))
-                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                    if (!SetupDiGetDeviceInterfaceDetail(devices, ref info, detail, needed, out _, IntPtr.Zero)) continue;
                     string path = Marshal.PtrToStringUni(detail + 4) ?? "";
                     string lower = path.ToLowerInvariant();
                     if (!lower.Contains("vid_10c4&pid_8b02") && !lower.Contains("vid_1209&pid_0001") && !lower.Contains("vid_1209&pid_0002")) continue;
-                    using var h = Open(path);
-                    found.Add(Inspect(h, path));
+                    try
+                    {
+                        using var h = Open(path);
+                        found.Add(Inspect(h, path));
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is Win32Exception) { }
                 }
                 finally { Marshal.FreeHGlobal(detail); }
             }
