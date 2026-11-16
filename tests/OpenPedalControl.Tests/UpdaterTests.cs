@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using OpenPedalControl.Model;
 using OpenPedalControl.Updates;
 using Xunit;
@@ -8,38 +6,6 @@ namespace OpenPedalControl.Tests;
 
 public class UpdaterTests
 {
-    private static readonly byte[] Installer = Encoding.UTF8.GetBytes("installer bytes");
-
-    private static string Sign(RSACryptoServiceProvider rsa, byte[] data) =>
-        System.Convert.ToBase64String(rsa.SignData(data, CryptoConfig.MapNameToOID("SHA256")));
-
-    [Fact]
-    public void Signature_from_the_matching_key_verifies()
-    {
-        using var rsa = new RSACryptoServiceProvider(2048) { PersistKeyInCsp = false };
-        Assert.True(Updater.VerifySignature(Installer, Sign(rsa, Installer), rsa.ToXmlString(false)));
-    }
-
-    [Fact]
-    public void Altered_file_wrong_key_or_garbage_signature_is_rejected()
-    {
-        using var rsa = new RSACryptoServiceProvider(2048) { PersistKeyInCsp = false };
-        using var other = new RSACryptoServiceProvider(2048) { PersistKeyInCsp = false };
-        string signature = Sign(rsa, Installer);
-        Assert.False(Updater.VerifySignature(Encoding.UTF8.GetBytes("installer bytez"), signature, rsa.ToXmlString(false)));
-        Assert.False(Updater.VerifySignature(Installer, Sign(other, Installer), rsa.ToXmlString(false)));
-        Assert.False(Updater.VerifySignature(Installer, "not base64!", rsa.ToXmlString(false)));
-    }
-
-    [Fact]
-    public void Embedded_release_key_is_a_public_rsa_3072_key()
-    {
-        using var rsa = new RSACryptoServiceProvider { PersistKeyInCsp = false };
-        rsa.FromXmlString(Updater.SigningPublicKey);
-        Assert.Equal(3072, rsa.KeySize);
-        Assert.True(rsa.PublicOnly);
-    }
-
     [Fact]
     public void Installer_path_is_quoted_for_powershell()
     {

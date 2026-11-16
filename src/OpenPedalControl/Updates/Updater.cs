@@ -14,14 +14,13 @@ namespace OpenPedalControl.Updates;
 
 public sealed class UpdateInfo
 {
-    public UpdateInfo(Version version, string tag, string pageUrl, string? setupUrl, string? setupSha256, string? signatureUrl)
+    public UpdateInfo(Version version, string tag, string pageUrl, string? setupUrl, string? setupSha256)
     {
         Version = version;
         Tag = tag;
         PageUrl = pageUrl;
         SetupUrl = setupUrl;
         SetupSha256 = setupSha256;
-        SignatureUrl = signatureUrl;
     }
 
     public Version Version { get; }
@@ -31,9 +30,6 @@ public sealed class UpdateInfo
 
     /// <summary>SHA-256 that GitHub reports for the installer (hex, lower case).</summary>
     public string? SetupSha256 { get; }
-
-    /// <summary>The installer's detached signature (<c>.sig</c>), made by the release workflow.</summary>
-    public string? SignatureUrl { get; }
 }
 
 /// <summary>Looks for new releases on GitHub and installs them.</summary>
@@ -43,13 +39,6 @@ public static class Updater
     public const string ReleasesPage = "https://github.com/IIPoliII/OpenPedalControl/releases/latest";
     private const string DownloadPrefix = "https://github.com/IIPoliII/OpenPedalControl/releases/download/";
 
-    /// <summary>
-    /// Public half of the release signing key (RSA 3072). The release workflow signs each installer with the private
-    /// half (GitHub secret UPDATE_SIGNING_KEY); an installer is run only when its signature verifies against this key.
-    /// A GitHub checksum alone would not catch a release published by someone who took over the repository.
-    /// </summary>
-    internal const string SigningPublicKey =
-        "<RSAKeyValue><Modulus>rXuoI4l7A1U+zupKSfAUpGQQR2E8suSscKGVWDO1qCE7uNF+Vgw7fetRpUeBf2uYfsTTPJky4I7XFLY/goeChRI3pZtes2zDQN8j8HpFhZCaZvKhaZGUs/oM0Qc+yPrFl3pp6Y6azP/tQtLQrrwrLv1hi+RuiAxhb/xdra3u5wXlLdaFHL2gCdV/TaMGOeUuRC0jl0LGwuuWLmdCfi5F3SI6iDEFIDw008cToC/K+S2l7XkaBYeJqJqTEaOIWvwektIe2BBZIHDCx7qR+BPF8AzvLgBn6TXllHrjVuozEm8addfFSq4+oB9831oBTFGWkpGDnS2KkWYGVgM7FkLKkFacm0bd7WNFNzPz8MFhbSJsI6f+hyJEdE83PS60K4Y/Q5L/q069H1EyT6UrXaYCtTNbl9kFzJx3OX0LfG7x9S5/CjhSGmTFNxA+9kxYuNc+jaO2vgQ2vZs0GeSfqkXyIqcHzcdfUQqMAHXoYa/JSJGIX3T+LBmUi1qzoTlL+RWV</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
 
     [DataContract]
     private sealed class Release
@@ -114,14 +103,13 @@ public static class Updater
 
         Asset? setup = release.Assets.FirstOrDefault(a => a.Name.StartsWith("OpenPedalControl-Setup", StringComparison.OrdinalIgnoreCase)
                                                           && a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
-        Asset? signature = setup == null ? null
-            : release.Assets.FirstOrDefault(a => a.Name.Equals(setup.Name + ".sig", StringComparison.OrdinalIgnoreCase));
-        return new UpdateInfo(latest, release.Tag, release.Url, setup?.Url, setup?.Sha256, signature?.Url);
+        return new UpdateInfo(latest, release.Tag, release.Url, setup?.Url, setup?.Sha256);
     }
 
     /// <summary>
     /// Downloads the installer and returns its path. The file is kept only when its SHA-256 matches the one GitHub
-    /// reports and its signature verifies against <see cref="SigningPublicKey"/>.
+    /// reports, so a damaged or swapped download is never run. Releases are not signed: the trust anchor is this
+    /// GitHub repository and its release workflow.
     /// </summary>
     public static async Task<string> DownloadAsync(UpdateInfo update)
     {
@@ -129,8 +117,6 @@ public static class Updater
         string? expected = update.SetupSha256;
         if (url == null || !url.StartsWith(DownloadPrefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("This release has no installer to update from. Download it from the releases page.");
-        if (update.SignatureUrl == null || !update.SignatureUrl.StartsWith(DownloadPrefix, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("This release is not signed, so it cannot be verified. Download it from the releases page.");
         if (expected == null || expected.Length != 64)
             throw new InvalidOperationException("GitHub gave no checksum for this release, so it cannot be verified. Download it from the releases page.");
 
@@ -142,7 +128,6 @@ public static class Updater
         try
         {
             using HttpClient client = CreateClient();
-            string signature = await client.GetStringAsync(update.SignatureUrl).ConfigureAwait(false);
             using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
             {
                 response.EnsureSuccessStatusCode();
@@ -152,8 +137,6 @@ public static class Updater
 
             if (!string.Equals(Sha256Of(target), expected, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The download does not match the checksum GitHub published, so it was deleted.");
-            if (!VerifySignature(File.ReadAllBytes(target), signature, SigningPublicKey))
-                throw new InvalidOperationException("The download is not signed with the OpenPedalControl release key, so it was deleted.");
         }
         catch
         {
@@ -161,17 +144,6 @@ public static class Updater
             throw;
         }
         return target;
-    }
-
-    /// <summary>Checks a base64 RSA-SHA256 (PKCS #1 v1.5) signature, as made by the release workflow.</summary>
-    internal static bool VerifySignature(byte[] data, string base64Signature, string publicKeyXml)
-    {
-        byte[] signature;
-        try { signature = Convert.FromBase64String(base64Signature.Trim()); }
-        catch (FormatException) { return false; }
-        using var rsa = new System.Security.Cryptography.RSACryptoServiceProvider { PersistKeyInCsp = false };
-        rsa.FromXmlString(publicKeyXml);
-        return rsa.VerifyData(data, System.Security.Cryptography.CryptoConfig.MapNameToOID("SHA256"), signature);
     }
 
     public static string Sha256Of(string path)

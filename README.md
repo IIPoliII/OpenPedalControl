@@ -28,8 +28,6 @@ From the [latest release](https://github.com/IIPoliII/OpenPedalControl/releases/
 
 Windows 10 or 11 (64-bit), with the Windows .NET Framework 4.8. Installed versions 0.2.0 and later can
 update through **Settings → Check now**. From 0.1.0 or a portable copy, download and run the installer once.
-From 0.5.0 on, the app runs an update only when the installer carries a valid signature from the
-OpenPedalControl release key (`.sig` next to the installer), in addition to GitHub's checksum.
 
 ## Where settings are saved
 
