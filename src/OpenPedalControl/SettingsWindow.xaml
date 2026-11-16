@@ -19,37 +19,7 @@
                     <TextBlock Text="STARTUP" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
                     <CheckBox Content="Start OpenPedalControl with Windows" IsChecked="{Binding StartWithWindows}"/>
                     <TextBlock Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="22,4,0,0"
-                               Text="Starts hidden in the notification area. Only needed for the virtual controller (vJoy); the Windows calibration works without the app running."/>
-                </StackPanel>
-            </Border>
-
-            <!-- vJoy -->
-            <Border Style="{StaticResource Card}" Margin="0,12,0,0">
-                <StackPanel>
-                    <TextBlock Text="VIRTUAL CONTROLLER (VJOY)" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
-
-                    <StackPanel Visibility="{Binding VJoyInstalled, Converter={StaticResource BoolToVisibility}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="vJoy device" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                            <ComboBox Grid.Column="1" Height="30" VerticalContentAlignment="Center" AutomationProperties.Name="vJoy device"
-                                      ItemsSource="{Binding VJoyDeviceOptions}" DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding VJoyDeviceId, Mode=TwoWay}"/>
-                        </Grid>
-                        <TextBlock Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,10"
-                                   Text="Automatic takes the first device no other program is using, so a vJoy device already set up for something else is left alone."/>
-                        <Button Content="Configure vJoy…" Command="{Binding OpenVJoyConfigCommand}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left"
-                                ToolTip="vJoy's own tool: add devices, or axes to a device."/>
-                    </StackPanel>
-
-                    <StackPanel x:Name="MissingPanel">
-                        <TextBlock FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}" Text="vJoy is not installed."/>
-                        <TextBlock Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,10"
-                                   Text="Without vJoy you can only use the Windows calibration: a curve with one bend, stored in Windows and working with the app closed. Install vJoy for fully custom curves."/>
-                        <Button Content="Install vJoy…" Click="OnInstallVJoyClick" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"/>
-                    </StackPanel>
+                               Text="Starts hidden in the notification area. Saved Windows and controller settings work without the app running."/>
                 </StackPanel>
             </Border>
 

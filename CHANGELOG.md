@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - 2026-11-16
+
+- New controller firmware mode: read and save calibration, sensor assignments, deadzones, brake max force and six-point curves directly on supported OpenPedalControl pedal firmware. Saved settings work with the app closed.
+- Live raw sensor readings and guided calibration support the three load-cell inputs, including sensors whose values decrease when pressed. Settings are verified after saving.
+- Removed vJoy output, device settings, driver downloads and bundled driver. Original pedal and handbrake firmware uses Windows calibration with a one-bend curve; former virtual profiles now open in this mode.
+- The app update does not install or replace any device firmware. The experimental EFM8 firmware sources, hardware notes and application-only USB tools are published separately in the repository. No PIC handbrake firmware is included.
+
 Shown inside the app ("What's new"). Each release is a `## version - date` heading followed by `- ` lines.
 
 ## 0.2.1 - 2026-11-12

@@ -10,6 +10,7 @@ internal static class HidNative
     public const int HidP_Input = 0;
 
     public const uint GENERIC_READ = 0x80000000;
+    public const uint GENERIC_WRITE = 0x40000000;
     public const uint FILE_SHARE_READ = 0x1;
     public const uint FILE_SHARE_WRITE = 0x2;
     public const uint OPEN_EXISTING = 3;
@@ -52,6 +53,12 @@ internal static class HidNative
     [DllImport("hid.dll", SetLastError = true)]
     public static extern bool HidD_GetInputReport(SafeFileHandle device, byte[] buffer, int bufferLength);
 
+    [DllImport("hid.dll", SetLastError = true)]
+    public static extern bool HidD_GetFeature(SafeFileHandle device, [In, Out] byte[] buffer, int bufferLength);
+
+    [DllImport("hid.dll", SetLastError = true)]
+    public static extern bool HidD_SetFeature(SafeFileHandle device, [In] byte[] buffer, int bufferLength);
+
     /// <summary>HIDP_CAPS is 32 consecutive USHORTs; see <see cref="Caps"/> for the indices used.</summary>
     [DllImport("hid.dll")]
     public static extern int HidP_GetCaps(IntPtr preparsedData, [Out] ushort[] caps);
@@ -68,6 +75,7 @@ internal static class HidNative
         public const int Usage = 0;
         public const int UsagePage = 1;
         public const int InputReportByteLength = 2;
+        public const int FeatureReportByteLength = 4;
         public const int NumberInputValueCaps = 24;
     }
 }

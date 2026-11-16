@@ -1,0 +1,96 @@
+# Onboard pedal firmware
+
+This prototype targets the Silicon Labs EFM8UB10F16G-QFN28 on the blue `HE SIM PEDALS` board.
+It samples three load-cell inputs, applies the saved profile, and sends a USB HID joystick report
+with throttle on X, brake on Y and clutch on Z. The desktop app is needed to configure the board.
+Once saved, the profile is applied by the controller at power-up.
+
+The EFM8 application builds with SDCC. On one board, USB programming, DirectInput enumeration,
+three independent ADC inputs, profile readback and persistence across a software reset have been
+tested. Sixty raw/cooked sample comparisons with a saved nonlinear curve matched the desktop math.
+A physical power-cycle test after saving, full user calibration, suspend current and timing measurements
+remain to be completed. This version implements LC1–LC3. The four expansion axes, twelve switch
+inputs and the separate PIC-based BU0836-LC handbrake are outside this target.
+
+This is experimental bench firmware. The desktop release only updates the Windows app; it does not
+flash a device. The USB programming tools are pinned to the verified original backup of the bench
+unit and are not a generic installer for other controllers. Original firmware and backups are not included.
+
+## Building for a board
+
+Use Python 3 and SDCC with the MCS-51 backend. From the repository root, run
+`python firmware/efm8/build.py --vid VID --pid PID` with the USB identifiers for the prototype.
+The photographed HE SIM PEDALS board defaults to ADC0MX **14, 13, 12** in **LC1, LC2, LC3 order**.
+For another wiring layout, pass `--mux` with its three channel numbers. The script produces an Intel HEX image and link map
+in `firmware/efm8/bin/`. It only builds the image.
+
+The bench uses private test identifiers `1209:0002` and serial `OPC-TEST0001`. These are not a unique
+USB identity assigned to this project for redistribution. Select appropriate USB identifiers and a unique
+serial before deploying to other units; the build requires explicit VID/PID arguments.
+
+The [board measurements](HARDWARE.md) document the three confirmed amplifier connections. Disassembly of the recovered
+original confirms the external P0.0/VREF reference and a gain of one for the load-cell inputs.
+The target now uses these settings. The physical reference voltage has not been measured.
+The same notes cover the manufacturer's documented backup options for both controllers. The
+[EFM8 build and bench notes in French](efm8/README.md) describe the target settings in more detail.
+
+## Using the profile
+
+1. On a bench unit running this firmware, open **OpenPedalControl Pedals** in the desktop app.
+   The editing screen reads the profile currently on the controller.
+2. Use **Calibrate…** or assign physical inputs to throttle, brake and clutch. Set each input's
+   released and pressed values, deadzones, brake max force, and six curve points. Inverted sensors
+   are accepted. Choosing **None** silences that game axis.
+3. **Save to controller** writes the entire profile and verifies the readback. Close the app and
+   bind the physical joystick's axes in the simulator.
+
+For the first bench test, verify enumeration and movement with one known input at a time. Save a
+recognizable curve, disconnect power, then reconnect with the app closed and check the cooked
+axis in a joystick viewer. Reopen the app and compare the profile with the saved settings.
+
+## HID reports (version 1)
+
+The current USB transport is unnumbered. Lengths below include the leading zero report-ID byte
+required by Windows HID APIs. Multi-byte numbers use little-endian order.
+
+| Report | Bytes | Contents |
+| --- | --- | --- |
+| Input 0 | 9 | Zero, two reserved button bytes, then three cooked 16-bit joystick axes (0–4095), X/Y/Z. |
+| Feature 0 | 57 | Zero, ASCII `OPC`, version 1, output count 3, three 13-byte configurations ordered X/Y/Z, then three cooked and three raw 16-bit samples. GET returns one coherent snapshot. SET validates and saves the profile; the final twelve bytes are ignored. |
+
+The input descriptor declares X/Y/Z usages individually inside its physical collection. This shape
+enumerated successfully in DirectInput on the bench. The app normalizes the first 45 feature bytes to
+an internal profile with ID 2. Raw readings occupy Windows feature offsets 51–56, in LC1/LC2/LC3
+connector order regardless of output mapping. The desktop codec also accepts early numbered
+13/45-byte prototypes; current firmware builds use the 9/57-byte transport above.
+
+Each axis record contains a one-byte source (0–2 or 255 for off), two 16-bit sensor endpoints
+(rest then fully pressed), one byte each for bottom and top deadzone percentages, and six
+output percentages at 0, 20, 40, 60, 80 and 100 percent travel. Brake max force uses the same
+upper endpoint adjustment as the desktop app. A brake max force of 70 percent encodes a top
+deadzone of 30 percent. Validation rejects conflicting inputs, an enabled axis with equal endpoints,
+and deadzones that eliminate the active range. The neutral profile maps LC1–LC3 to X–Z with a
+linear curve and sensor endpoints 0 and 4092 (the EFM8 ADC's 12-bit burst-mode range).
+
+The firmware alternates between two nonvolatile slots, each with a generation number, CRC and commit
+marker. A save leaves the previous slot intact until the new one has been written and checked.
+
+## Testing
+
+`dotnet test -c Release` exercises the Windows app, including the profile codec and onboard curve
+preview. With .NET 10 and a host C compiler, `python firmware/tests/run.py` also compiles the
+production C code and compares it against the desktop calibration math across all 4,096 input values.
+
+`python -m unittest discover -s firmware/tests -p "test_*.py"` checks Intel HEX integrity,
+protected address ranges and the application-only update engine. A simulated flash target exercises
+successful programming, restoration, bad CRCs, unexpected responses and a disconnect at every transfer.
+The Windows [USB updater](efm8/README.md#outil-usb-de-transfert-et-de-restauration) has separate
+read-only inspection/verification and explicit programming commands. Its read-only path has been
+checked against the original controller. Application programming and protected-region CRC checks
+passed on the bench. Writing the original backup back to the board has not been tested. The original
+bootloader and security pages are excluded from USB writes; damage would require C2 recovery.
+
+`python firmware/efm8/onboard_check.py` reads the profile and live snapshot without saving anything.
+`enter_bootloader.py` requests a software return to the preserved bootloader for later bench updates.
+`build.py --diagnostic-no-feature` builds a separate bench diagnostic that returns to the bootloader
+after ten seconds; it is not the normal pedal application.

@@ -25,8 +25,8 @@
                     <!-- Title and axis assignment -->
                     <DockPanel Grid.Row="0">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Axis" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox ItemsSource="{Binding AxisOptions}" SelectedItem="{Binding SelectedAxis, Mode=TwoWay}" AutomationProperties.Name="Axis"
+                            <TextBlock Text="{Binding InputLabel}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox ItemsSource="{Binding AxisOptions}" SelectedItem="{Binding SelectedAxis, Mode=TwoWay}" AutomationProperties.Name="{Binding InputLabel}"
                                       DisplayMemberPath="Label" MinWidth="82" Height="28" VerticalContentAlignment="Center"
                                       ToolTip="The controller input this pedal is wired to. The calibration finds it automatically."/>
                         </StackPanel>
@@ -113,7 +113,7 @@
                                     AutomationProperties.Name="Curve: travel at 50 % output"/>
                             </StackPanel>
 
-                            <StackPanel Grid.Row="7" Visibility="{Binding IsVirtual, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Grid.Row="7" Visibility="{Binding UsesCurvePoints, Converter={StaticResource BoolToVisibility}}">
                                 <Grid Style="{StaticResource FieldRow}" ToolTip="Start from a ready-made curve, then fine-tune the points below.">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -140,16 +140,6 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <Grid Style="{StaticResource FieldRow}" Margin="0,6,0,0"
-                                      ToolTip="The axis of “vJoy Device” this pedal is sent to. Bind that axis in your sim.">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="100"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="vJoy axis" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox Grid.Column="1" Height="28" VerticalContentAlignment="Center" AutomationProperties.Name="vJoy axis"
-                                              ItemsSource="{Binding VirtualAxisOptions}" SelectedItem="{Binding SelectedVirtualAxis, Mode=TwoWay}"/>
-                                </Grid>
                             </StackPanel>
 
                             <DockPanel Grid.Row="9" Margin="0,6,0,0">
@@ -196,10 +186,10 @@
                                         ToolTip="Raw sensor position. The shaded ends are outside the active range."/>
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding RawText}" HorizontalAlignment="Center" FontWeight="SemiBold"/>
 
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Output" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding OutputLabel}" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
                             <c:LevelBar Grid.Row="1" Grid.Column="1" Width="26" Margin="0,6"
                                         Value="{Binding OutputLevel}" Fill="{Binding Accent}"
-                                        ToolTip="What a game receives with these settings."/>
+                                        ToolTip="Output calculated from the raw sensor reading with the settings shown."/>
                             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding OutputText}" HorizontalAlignment="Center" FontWeight="SemiBold"/>
                         </Grid>
                     </Grid>
@@ -226,7 +216,7 @@
                     <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource HeaderButton}" Margin="8,0,0,0"
                             ToolTip="Look for connected controllers again and reload the selected one."/>
                     <Button Content="Settings" Click="OnSettingsClick" Style="{StaticResource HeaderButton}" Margin="8,0,0,0"
-                            ToolTip="Start with Windows, vJoy device and updates."/>
+                            ToolTip="Start with Windows and updates."/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -239,9 +229,9 @@
                 <Button DockPanel.Dock="Left" Content="Reset settings" Command="{Binding ResetCommand}" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
                         ToolTip="Put deadzones and curves back to their defaults. The measured calibration is kept."/>
                 <Button DockPanel.Dock="Left" Content="Remove calibration" Click="OnRemoveCalibrationClick" Style="{StaticResource QuietButton}" Margin="8,0,0,0"
-                        IsEnabled="{Binding HasDevice}" ToolTip="Delete this device's calibration from Windows and start over."/>
+                        IsEnabled="{Binding HasDevice}" ToolTip="{Binding RemoveCalibrationHint}"/>
                 <Button DockPanel.Dock="Right" Content="{Binding SaveText}" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}" MinWidth="150"
-                        ToolTip="Windows calibration: stored in Windows for every game. Virtual controller: kept in OpenPedalControl's profile. Nothing is written to the pedals themselves."/>
+                        ToolTip="{Binding SaveHint}"/>
                 <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0" TextTrimming="CharacterEllipsis"
                            Foreground="{StaticResource TextMuted}" TextAlignment="Right" ToolTip="{Binding Status}"/>
             </DockPanel>
@@ -271,46 +261,18 @@
         <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="24,10,24,0" Padding="18,10"
                 Visibility="{Binding HasDevice, Converter={StaticResource BoolToVisibility}}">
             <StackPanel>
-                <WrapPanel>
-                    <TextBlock Text="OUTPUT" Style="{StaticResource SectionTitle}" Margin="0,1,18,0"/>
-                    <RadioButton GroupName="OutputMode" IsChecked="{Binding IsWindowsMode}" Margin="0,0,28,0">
-                        <TextBlock><Run FontWeight="SemiBold" Text="Windows calibration"/><Run Foreground="{StaticResource TextMuted}" Text="  works with the app closed, one-bend curve"/></TextBlock>
-                    </RadioButton>
-                    <RadioButton GroupName="OutputMode" IsChecked="{Binding IsVirtualMode}" IsEnabled="{Binding VJoyInstalled}">
-                        <TextBlock><Run FontWeight="SemiBold" Text="Virtual controller (vJoy)"/><Run Foreground="{StaticResource TextMuted}" Text="  custom curve, app runs in the tray"/></TextBlock>
-                    </RadioButton>
-                </WrapPanel>
+                <TextBlock Visibility="{Binding IsWindowsMode, Converter={StaticResource BoolToVisibility}}" TextWrapping="Wrap">
+                    <Run FontWeight="SemiBold" Text="Windows calibration"/>
+                    <Run Foreground="{StaticResource TextMuted}" Text="  works with the app closed, one-bend curve"/>
+                </TextBlock>
+                <TextBlock Visibility="{Binding IsOnboardMode, Converter={StaticResource BoolToVisibility}}" TextWrapping="Wrap">
+                    <Run FontWeight="SemiBold" Text="Controller firmware"/>
+                    <Run Foreground="{StaticResource TextMuted}" Text="  Games receive the saved curve directly over USB, even with OpenPedalControl closed."/>
+                </TextBlock>
                 <StackPanel Margin="0,6,0,0">
-                    <TextBlock TextWrapping="Wrap" FontSize="12" Text="{Binding VirtualStatus}" FontWeight="SemiBold"
-                               Visibility="{Binding IsVirtualMode, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding VirtualOk}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
                     <TextBlock TextWrapping="Wrap" FontSize="12" Style="{StaticResource Muted}"
                                Visibility="{Binding IsWindowsMode, Converter={StaticResource BoolToVisibility}}"
                                Text="Stored in Windows for every game. Nothing needs to run while you drive."/>
-                    <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0" x:Name="NoVJoyHint">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding VJoyInstalled}" Value="False">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                        <Run Text="Virtual controller unavailable: custom curves need the free vJoy driver."/>
-                        <Hyperlink Click="OnSettingsClick" Foreground="{StaticResource AccentBrush}">Install it from Settings</Hyperlink>
-                    </TextBlock>
                 </StackPanel>
             </StackPanel>
         </Border>

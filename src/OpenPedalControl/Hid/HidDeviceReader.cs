@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
+using OpenPedalControl.Model;
 
 namespace OpenPedalControl.Hid;
 
@@ -46,14 +47,18 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
     private readonly FileStream _stream;
     private readonly IntPtr _preparsed;
     private readonly int _reportLength;
+    private readonly int _featureReportLength;
+    private readonly object _featureSync = new object();
+    private bool UsesSnapshots => _featureReportLength == OnboardProtocol.SnapshotFeatureLength;
     private readonly int[] _values;
     private int _closed;
 
-    private HidDeviceReader(FileStream stream, IntPtr preparsed, int reportLength, List<HidAxis> axes)
+    private HidDeviceReader(FileStream stream, IntPtr preparsed, int reportLength, int featureLength, List<HidAxis> axes)
     {
         _stream = stream;
         _preparsed = preparsed;
         _reportLength = reportLength;
+        _featureReportLength = featureLength;
         Axes = axes;
         _values = Enumerable.Repeat(NoData, axes.Count).ToArray();
     }
@@ -64,6 +69,7 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
     public string Serial { get; private set; } = "";
     public ushort VendorId { get; private set; }
     public ushort ProductId { get; private set; }
+    public bool IsOnboard { get; private set; }
     public IReadOnlyList<HidAxis> Axes { get; }
 
     /// <summary>Raised on the reader's background thread after each input report has been parsed.</summary>
@@ -104,7 +110,8 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
             var attributes = new HidNative.HIDD_ATTRIBUTES { Size = Marshal.SizeOf(typeof(HidNative.HIDD_ATTRIBUTES)) };
             HidNative.HidD_GetAttributes(handle, ref attributes);
 
-            var reader = new HidDeviceReader(new FileStream(handle, FileAccess.Read, reportLength, true), preparsed, reportLength, axes)
+            var reader = new HidDeviceReader(new FileStream(handle, FileAccess.Read, reportLength, true), preparsed, reportLength,
+                caps[HidNative.Caps.FeatureReportByteLength], axes)
             {
                 Path = path,
                 VendorId = attributes.VendorID,
@@ -113,6 +120,8 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
                 Manufacturer = ReadString(handle, HidNative.HidD_GetManufacturerString),
                 Serial = ReadString(handle, HidNative.HidD_GetSerialNumberString),
             };
+            reader.IsOnboard = OnboardProtocol.Matches(reader.Product, reportLength,
+                caps[HidNative.Caps.FeatureReportByteLength], axes);
             reader.RequestInitialReport(path);
             Task.Run(reader.ReadLoopAsync);
             return reader;
@@ -224,12 +233,14 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
     /// </summary>
     private void RequestInitialReport(string path)
     {
+        if (IsOnboard && UsesSnapshots) return; // Raw samples come from the first background snapshot.
         // A separate synchronous handle: hid.dll issues this request without an OVERLAPPED structure.
         using SafeFileHandle handle = HidNative.CreateFile(path, HidNative.GENERIC_READ,
             HidNative.FILE_SHARE_READ | HidNative.FILE_SHARE_WRITE, IntPtr.Zero, HidNative.OPEN_EXISTING, 0, IntPtr.Zero);
         if (handle.IsInvalid) return;
 
         var report = new byte[_reportLength];
+        if (IsOnboard) report[0] = OnboardProtocol.InputId;
         if (HidNative.HidD_GetInputReport(handle, report, report.Length)) ParseReport(report);
     }
 
@@ -238,6 +249,20 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
         var report = new byte[_reportLength];
         try
         {
+            if (IsOnboard && UsesSnapshots)
+            {
+                using var handle = OpenFeatureHandle(HidNative.GENERIC_READ);
+                while (!IsClosed)
+                {
+                    byte[] snapshot;
+                    lock (_featureSync) snapshot = ReadTransportFeature(handle);
+                    int[] raw = OnboardProtocol.ReadSnapshot(snapshot);
+                    for (int i = 0; i < raw.Length; i++) Volatile.Write(ref _values[i], raw[i]);
+                    ReportReceived?.Invoke(this);
+                    await Task.Delay(20).ConfigureAwait(false);
+                }
+                return;
+            }
             while (!IsClosed)
             {
                 int read = await _stream.ReadAsync(report, 0, report.Length).ConfigureAwait(false);
@@ -261,6 +286,14 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
 
     private void ParseReport(byte[] report)
     {
+        if (IsOnboard)
+        {
+            // Windows and games see the first three values. Calibration uses the three physical ADC samples.
+            if (report[0] != OnboardProtocol.InputId) return;
+            for (int i = 0; i < Axes.Count; i++)
+                Volatile.Write(ref _values[i], OnboardProtocol.ReadWord(report, 7 + 2 * i));
+            return;
+        }
         foreach (HidAxis axis in Axes)
         {
             int status = HidNative.HidP_GetUsageValue(HidNative.HidP_Input, axis.UsagePage, axis.LinkCollection, axis.Usage,
@@ -274,6 +307,52 @@ public sealed class HidDeviceReader : IAxisSource, IDisposable
                 value = (value << shift) >> shift; // sign-extend
             }
             Volatile.Write(ref _values[axis.Index], value);
+        }
+    }
+
+    public DeviceProfile ReadOnboardProfile()
+    {
+        using var handle = OpenFeatureHandle(HidNative.GENERIC_READ);
+        lock (_featureSync)
+            return OnboardProtocol.DecodeTransport(ReadTransportFeature(handle), VendorId, ProductId, Serial);
+    }
+
+    public void SaveOnboardProfile(DeviceProfile profile) => WriteFeature(OnboardProtocol.Encode(profile));
+
+    public void ResetOnboardProfile() => WriteFeature(OnboardProtocol.Defaults());
+
+    private SafeFileHandle OpenFeatureHandle(uint access)
+    {
+        if (!IsOnboard || IsClosed) throw new IOException("The onboard controller is unavailable.");
+        var handle = HidNative.CreateFile(Path, access, HidNative.FILE_SHARE_READ | HidNative.FILE_SHARE_WRITE,
+            IntPtr.Zero, HidNative.OPEN_EXISTING, 0, IntPtr.Zero);
+        if (!handle.IsInvalid) return handle;
+        handle.Dispose();
+        throw new IOException("Could not open the controller settings interface.");
+    }
+
+    private byte[] ReadTransportFeature(SafeFileHandle handle)
+    {
+        var report = new byte[_featureReportLength];
+        report[0] = UsesSnapshots ? (byte)0 : OnboardProtocol.FeatureId;
+        if (!HidNative.HidD_GetFeature(handle, report, report.Length))
+            throw new IOException("The controller did not return its saved settings.");
+        return report;
+    }
+
+    private void WriteFeature(byte[] report)
+    {
+        using var handle = OpenFeatureHandle(HidNative.GENERIC_READ | HidNative.GENERIC_WRITE);
+        lock (_featureSync)
+        {
+            // Check the on-device protocol before the first write, including reset, and avoid redundant flash cycles.
+            byte[] current = OnboardProtocol.Encode(OnboardProtocol.DecodeTransport(ReadTransportFeature(handle), VendorId, ProductId, Serial));
+            if (current.SequenceEqual(report)) return;
+            byte[] wire = OnboardProtocol.EncodeTransport(OnboardProtocol.Decode(report, VendorId, ProductId, Serial), UsesSnapshots);
+            if (!HidNative.HidD_SetFeature(handle, wire, wire.Length))
+                throw new IOException("The controller did not accept the settings.");
+            if (!OnboardProtocol.Encode(OnboardProtocol.DecodeTransport(ReadTransportFeature(handle), VendorId, ProductId, Serial)).SequenceEqual(report))
+                throw new IOException("The controller's saved settings did not match the edit. Reload the device and retry.");
         }
     }
 

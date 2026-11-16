@@ -36,7 +36,10 @@ jobs:
         shell: bash
         run: dotnet test OpenPedalControl.slnx --configuration Release -p:Version=${{ steps.version.outputs.value }}
 
-      # Installer with the optional vJoy driver (Inno Setup is preinstalled on GitHub's Windows runners).
+      - name: Test firmware image and update guards
+        run: python -m unittest discover -s firmware/tests -p "test_*.py"
+
+      # Driver-free installer (Inno Setup is preinstalled on GitHub's Windows runners).
       - name: Build installer
         shell: pwsh
         run: ./installer/build-installer.ps1 -Version "${{ steps.version.outputs.value }}"

@@ -18,7 +18,6 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _deviceChangeTimer;
     private TrayIcon? _tray;
     private bool _exiting;
-    private bool _trayHintShown;
 
     public MainWindow()
     {
@@ -43,7 +42,7 @@ public partial class MainWindow : Window
     /// <summary>True once the window finished starting, so later errors need not end the app.</summary>
     public bool IsInitializedForUse { get; private set; }
 
-    /// <summary>Starts device handling. When hidden, the app lives in the tray and only feeds vJoy.</summary>
+    /// <summary>Starts device handling. When hidden, the app lives in the notification area.</summary>
     public void Start(bool hidden)
     {
         // A window handle is needed for plug/unplug notifications even while the window stays hidden.
@@ -95,10 +94,12 @@ public partial class MainWindow : Window
 
     private void OnCalibrateClick(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.Reader == null || _viewModel.Controls.Count == 0) return;
+        var reader = _viewModel.Reader;
+        if (reader == null || _viewModel.Controls.Count == 0) return;
 
-        var wizard = new CalibrationWizard(_viewModel.Reader, _viewModel.Controls.ToList()) { Owner = this };
-        if (wizard.ShowDialog() == true) _viewModel.ApplyWizardResults(wizard.Results);
+        var wizard = new CalibrationWizard(reader, _viewModel.Controls.ToList()) { Owner = this };
+        if (wizard.ShowDialog() == true && ReferenceEquals(reader, _viewModel.Reader))
+            _viewModel.ApplyWizardResults(wizard.Results);
     }
 
     /// <summary>The "What's new" window; <paramref name="updatedFrom"/> highlights what changed since that version.</summary>
@@ -112,15 +113,18 @@ public partial class MainWindow : Window
     {
         if (!IsVisible) ShowFromTray();
         new SettingsWindow(_viewModel, () => ShowChangelog(null)) { Owner = this }.ShowDialog();
-        _viewModel.RefreshDevices(); // vJoy may have been installed meanwhile.
     }
 
     private void OnRemoveCalibrationClick(object sender, RoutedEventArgs e)
     {
+        var reader = _viewModel.Reader;
         MessageBoxResult answer = MessageBox.Show(this,
-            "Remove this device's calibration and settings?\n\nGames will see the raw sensor range again until you calibrate anew.",
+            _viewModel.IsOnboardMode
+                ? "Replace the profile stored on this controller with its default input mapping, calibration and curves?"
+                : "Remove this device's calibration and settings?\n\nGames will see the raw sensor range again until you calibrate anew.",
             "Remove calibration", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
-        if (answer == MessageBoxResult.OK) _viewModel.RemoveCalibration();
+        if (answer == MessageBoxResult.OK && ReferenceEquals(reader, _viewModel.Reader))
+            _viewModel.RemoveCalibration();
     }
 
     /// <summary>Asks about unsaved settings. Returns false when the user cancelled.</summary>
@@ -131,15 +135,18 @@ public partial class MainWindow : Window
             "Some settings are not saved yet.\n\nSave them now?",
             "OpenPedalControl", MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes);
         if (answer == MessageBoxResult.Cancel) return false;
-        if (answer == MessageBoxResult.Yes) _viewModel.Save();
-        else _viewModel.RevertUnsaved();
+        if (answer == MessageBoxResult.Yes)
+        {
+            _viewModel.Save();
+            return !_viewModel.IsDirty;
+        }
+        _viewModel.RevertUnsaved();
         return true;
     }
 
-    /// <summary>The downloaded update waits for this process to end; unsaved edits are kept by saving them.</summary>
+    /// <summary>The update has been scheduled and is waiting for this process to exit.</summary>
     private void ExitForUpdate()
     {
-        if (_viewModel.HasDevice && _viewModel.IsDirty) _viewModel.Save();
         _exiting = true;
         Close();
     }
@@ -165,19 +172,6 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // While pedals are sent to vJoy, closing the window only hides it: games still need the output.
-            if (_viewModel.IsFeedingVJoy)
-            {
-                e.Cancel = true;
-                Hide();
-                if (!_trayHintShown)
-                {
-                    _trayHintShown = true;
-                    _tray?.ShowMessage("OpenPedalControl is still running",
-                        "Your pedals are being sent to vJoy. Right-click the tray icon to exit.");
-                }
-                return;
-            }
         }
         base.OnClosing(e);
     }

@@ -156,7 +156,8 @@ public sealed class WizardViewModel : ObservableObject
         if (detected && candidate != null && _reader.TryGetValue(candidate.Index, out int current))
         {
             item.Level = (current - candidate.LogicalMin) / (double)Math.Max(1, candidate.LogicalMax - candidate.LogicalMin);
-            item.Detail = $"Axis {candidate.Name}  ·  now {current}  ·  furthest {_peakValue[candidate.Index]}";
+            string input = item.Control.AxisOptions.First(option => option.Axis == candidate).Label;
+            item.Detail = $"{item.Control.InputLabel} {input}  ·  now {current}  ·  furthest {_peakValue[candidate.Index]}";
         }
         else
         {
@@ -190,7 +191,8 @@ public sealed class WizardViewModel : ObservableObject
             item.Full = _peakValue[axis.Index];
             item.State = WizardItemState.Done;
             item.Level = double.NaN;
-            item.Detail = $"Axis {axis.Name}  ·  {item.Rest} → {item.Full}";
+            string input = item.Control.AxisOptions.First(option => option.Axis == axis).Label;
+            item.Detail = $"{item.Control.InputLabel} {input}  ·  {item.Rest} → {item.Full}";
             _taken[axis.Index] = true;
         }
         BeginStep(_step + 1);
@@ -250,9 +252,9 @@ public sealed class WizardViewModel : ObservableObject
         {
             int done = Results.Count;
             Title = "Finished";
-            Instruction = done > 0
-                ? "Click Save to store the new calibration in Windows."
-                : "Nothing was calibrated. Close this window to keep everything as it was.";
+            Instruction = done == 0 ? "Nothing was calibrated. Close this window to keep everything as it was."
+                : Items[0].Control.IsWindows ? "Click Save to store the new calibration in Windows."
+                : "Click Save to store the new calibration on the controller.";
         }
     }
 }

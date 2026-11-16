@@ -4,13 +4,30 @@ using System.Linq;
 using System.Text;
 using OpenPedalControl.Model;
 using OpenPedalControl.ViewModels;
-using OpenPedalControl.VJoy;
 using Xunit;
 
 namespace OpenPedalControl.Tests;
 
-public class VirtualOutputTests
+public class CurveTests
 {
+    [Theory]
+    [InlineData("Virtual")]
+    [InlineData("1")]
+    [InlineData("Unknown")]
+    public void Retired_and_unknown_output_modes_fall_back_to_windows(string output)
+    {
+        string path = Path.Combine(Path.GetTempPath(), "opc-mode-" + System.Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(path, "{ \"Output\": \"" + output + "\", \"Controls\": [{ \"Name\": \"Handbrake\", \"VirtualAxis\": 51, \"CurveMidpoint\": 65 }] }", new UTF8Encoding(false));
+        try
+        {
+            DeviceProfile profile = ProfileStore.Read(path)!;
+            Assert.Equal(OutputMode.Windows, profile.GetOutputMode());
+            Assert.Equal(65, profile.Controls[0].CurveMidpoint);
+            Assert.Equal(Curve.Linear(), profile.Controls[0].CurvePoints);
+        }
+        finally { File.Delete(path); }
+    }
+
     [Theory]
     [InlineData(0.0, 0.0)]
     [InlineData(0.1, 0.1)]
@@ -55,21 +72,6 @@ public class VirtualOutputTests
     }
 
     [Fact]
-    public void Value_sent_to_vjoy_combines_calibration_deadzones_and_curve()
-    {
-        var settings = new ControlSettings
-        {
-            RawRest = 76, RawFull = 2850, BottomDeadzone = 0, TopDeadzone = 10,
-            CurvePoints = new List<double> { 0, 4, 16, 36, 64, 100 },
-        };
-        // Full output at 90 % of the measured force; half force gives 0.5/0.9 of the travel.
-        Assert.Equal(1, VirtualOutput.Compute(2600, settings), 6);
-        double fullEdge = 2850 - (2850 - 76) * 0.10; // 2572.6
-        double travel = (1463 - 76) / (fullEdge - 76);
-        Assert.Equal(Curve.Evaluate(settings.CurvePoints, travel), VirtualOutput.Compute(1463, settings), 6);
-    }
-
-    [Fact]
     public void Old_profiles_without_a_curve_load_as_linear_windows_mode()
     {
         string path = Path.Combine(Path.GetTempPath(), "opc-old-" + System.Guid.NewGuid().ToString("N") + ".json");
@@ -95,9 +97,8 @@ public class VirtualOutputTests
         throttle.BottomDeadzone = 0;
         throttle.TopValue = 0;
         Assert.Null(throttle.GraphPoints);
-        Assert.Equal("X", throttle.SelectedVirtualAxis.Label);
 
-        throttle.SetOutputMode(true);
+        throttle.SetOutputMode(OutputMode.Onboard);
         throttle.SelectedPreset = Curve.Presets.Single(p => p.Name == "Strong progressive");
         Assert.Equal(6, throttle.GraphPoints!.Count);
 

@@ -65,19 +65,8 @@ public static class DeviceTemplates
         settings.CurvePoints = Curve.Linear();
     }
 
-    /// <summary>Default vJoy axis per role, chosen so pedals and a handbrake on separate USB devices never collide.</summary>
-    public static int DefaultVirtualAxis(ControlKind kind) => kind switch
-    {
-        ControlKind.Throttle => 0x30, // X
-        ControlKind.Brake => 0x31,    // Y
-        ControlKind.Clutch => 0x32,   // Z
-        ControlKind.Handbrake => 0x33, // Rx
-        _ => 0,
-    };
-
     private static ControlSettings Create(string name, ControlKind kind, HidAxis axis, double bottom, double top) => new ControlSettings
     {
-        VirtualAxis = DefaultVirtualAxis(kind),
         Name = name,
         Kind = kind.ToString(),
         UsagePage = axis.UsagePage,

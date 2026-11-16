@@ -10,9 +10,6 @@ namespace OpenPedalControl.Model;
 [DataContract]
 public sealed class AppSettings
 {
-    /// <summary>vJoy device to send to (1..16), or 0 to take the first free one.</summary>
-    [DataMember(Order = 0)] public int VJoyDevice { get; set; }
-
     /// <summary>Look for a new release each time the app starts.</summary>
     [DataMember(Order = 1)] public bool CheckForUpdates { get; set; } = true;
 
@@ -38,7 +35,6 @@ public sealed class AppSettings
             byte[] json = new UTF8Encoding(false).GetBytes(File.ReadAllText(FilePath));
             using var stream = new MemoryStream(json);
             var settings = new DataContractJsonSerializer(typeof(AppSettings)).ReadObject(stream) as AppSettings ?? new AppSettings();
-            if (settings.VJoyDevice < 0 || settings.VJoyDevice > 16) settings.VJoyDevice = 0;
             return settings;
         }
         catch (Exception)

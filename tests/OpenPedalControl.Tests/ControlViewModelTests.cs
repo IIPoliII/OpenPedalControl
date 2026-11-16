@@ -108,6 +108,31 @@ public class ControlViewModelTests
     }
 
     [Fact]
+    public void Onboard_preview_uses_raw_input_and_the_six_point_curve_without_a_virtual_axis()
+    {
+        var device = new FakeDevice(3);
+        ControlViewModel throttle = Get(device.CreateControls(), ControlKind.Throttle);
+        throttle.SetOutputMode(OutputMode.Onboard);
+        throttle.ApplyMeasurement(device["Z"], 3000, 1000);
+        throttle.BottomDeadzone = 10;
+        throttle.TopValue = 10;
+        throttle.SelectedPreset = Curve.Presets.Single(p => p.Name == "Strong progressive");
+
+        device.Set("Z", 2320); // 30 % travel after the deadzones, 10 % output.
+        throttle.UpdateLive();
+        Assert.False(throttle.IsWindows);
+        Assert.False(throttle.IsWindows);
+        Assert.Equal("Preview", throttle.OutputLabel);
+        Assert.Equal(6, throttle.GraphPoints!.Count);
+        Assert.Equal(0.10, throttle.OutputLevel, 3);
+        Assert.Equal(89, throttle.BottomMaximum);
+        Assert.False(throttle.IsApplied);
+        throttle.SetOnboardSaved(true);
+        Assert.True(throttle.IsApplied);
+        Assert.Contains("controller", throttle.StateText);
+    }
+
+    [Fact]
     public void Applied_state_tracks_what_windows_has_stored()
     {
         var device = new FakeDevice();

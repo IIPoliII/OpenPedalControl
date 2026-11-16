@@ -9,27 +9,18 @@ namespace OpenPedalControl.ViewModels;
 
 public sealed class AxisOption
 {
-    public AxisOption(HidAxis? axis) => Axis = axis;
-
-    public HidAxis? Axis { get; }
-    public string Label => Axis?.Name ?? "None";
-    public override string ToString() => Label;
-}
-
-public sealed class VirtualAxisOption
-{
-    public VirtualAxisOption(int usage, string label)
+    public AxisOption(HidAxis? axis, string? label = null)
     {
-        Usage = usage;
-        Label = label;
+        Axis = axis;
+        Label = label ?? axis?.Name ?? "None";
     }
 
-    public int Usage { get; }
+    public HidAxis? Axis { get; }
     public string Label { get; }
     public override string ToString() => Label;
 }
 
-/// <summary>One editable point of the virtual-mode curve.</summary>
+/// <summary>One editable point of an output curve.</summary>
 public sealed class CurvePointViewModel : ObservableObject
 {
     private readonly ControlViewModel _owner;
@@ -69,9 +60,8 @@ public sealed class ControlViewModel : ObservableObject
     private string _rawText = "–";
     private string _outputText = "–";
 
-    private bool _isVirtual;
-    private bool _virtualOk;
-    private string _virtualStatus = "";
+    private OutputMode _mode;
+    private bool _onboardSaved;
 
     public ControlViewModel(ControlSettings settings, IAxisSource reader, IReadOnlyList<AxisOption> axisOptions)
     {
@@ -91,9 +81,6 @@ public sealed class ControlViewModel : ObservableObject
 
     /// <summary>Raised when the control is moved to a different axis.</summary>
     public event EventHandler? AxisChanged;
-
-    /// <summary>Raised when the control is sent to a different vJoy axis.</summary>
-    public event EventHandler? VirtualAxisChanged;
 
     public ControlSettings Settings { get; }
     public ControlKind Kind { get; }
@@ -166,6 +153,8 @@ public sealed class ControlViewModel : ObservableObject
             if (value.Equals(Settings.BottomDeadzone)) return;
             Settings.BottomDeadzone = value;
             Raise();
+            Raise(nameof(TopMinimum));
+            Raise(nameof(TopMaximum));
             OnSettingsChanged();
         }
     }
@@ -179,8 +168,8 @@ public sealed class ControlViewModel : ObservableObject
         : "Share of the travel ignored at the fully pressed end, so 100 % is always reached.";
     public double TopMinimum => UsesMaxForce ? 100 - TopLimit : 0;
     public double TopMaximum => UsesMaxForce ? 100 : TopLimit;
-    private const double TopLimit = 80;
-    public double BottomMaximum => 50;
+    private double TopLimit => _mode == OutputMode.Onboard ? Math.Min(90, 99 - Settings.BottomDeadzone) : 80;
+    public double BottomMaximum => _mode == OutputMode.Onboard ? Math.Min(90, 99 - Settings.TopDeadzone) : 50;
 
     public double TopValue
     {
@@ -191,6 +180,7 @@ public sealed class ControlViewModel : ObservableObject
             if (deadzone.Equals(Settings.TopDeadzone)) return;
             Settings.TopDeadzone = deadzone;
             Raise();
+            Raise(nameof(BottomMaximum));
             OnSettingsChanged();
         }
     }
@@ -212,20 +202,21 @@ public sealed class ControlViewModel : ObservableObject
     public double MidpointMinimum => CalibrationMath.MinMidpointPercent;
     public double MidpointMaximum => CalibrationMath.MaxMidpointPercent;
 
-    // --- Virtual mode -------------------------------------------------------------------------------
-
-    public static IReadOnlyList<VirtualAxisOption> VirtualAxisOptions { get; } =
-        new[] { new VirtualAxisOption(0, "Off") }
-            .Concat(VJoy.VJoyDevice.AxisNames.Select(a => new VirtualAxisOption(a.usage, a.name)))
-            .ToList();
-
     private static readonly CurvePreset CustomPreset = new CurvePreset("Custom");
 
     public static IReadOnlyList<CurvePreset> PresetOptions { get; } = Curve.Presets.Concat(new[] { CustomPreset }).ToList();
 
-    /// <summary>True when this device sends to vJoy instead of storing a Windows calibration.</summary>
-    public bool IsVirtual => _isVirtual;
-    public bool IsWindows => !_isVirtual;
+    public bool IsWindows => _mode == OutputMode.Windows;
+    public bool UsesCurvePoints => !IsWindows;
+    public string OutputLabel => _mode == OutputMode.Onboard ? "Preview" : "Output";
+    public string InputLabel => _mode == OutputMode.Onboard ? "Sensor" : "Axis";
+    private string GameAxis => Kind switch
+    {
+        ControlKind.Throttle => "Game axis X",
+        ControlKind.Brake => "Game axis Y",
+        ControlKind.Clutch => "Game axis Z",
+        _ => "",
+    };
 
     public IReadOnlyList<CurvePointViewModel> CurvePoints { get; }
 
@@ -240,35 +231,13 @@ public sealed class ControlViewModel : ObservableObject
         }
     }
 
-    public VirtualAxisOption SelectedVirtualAxis
-    {
-        get => VirtualAxisOptions.FirstOrDefault(o => o.Usage == Settings.VirtualAxis) ?? VirtualAxisOptions[0];
-        set
-        {
-            if (value == null || value.Usage == Settings.VirtualAxis) return;
-            Settings.VirtualAxis = value.Usage;
-            Raise();
-            Raise(nameof(StateText));
-            SettingsChanged?.Invoke(this, EventArgs.Empty);
-            VirtualAxisChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
-    /// <summary>Called when another control took this control's vJoy axis.</summary>
-    public void RefreshVirtualAxis()
-    {
-        Raise(nameof(SelectedVirtualAxis));
-        Raise(nameof(StateText));
-    }
-
-    /// <summary>Curve points for the graph in virtual mode; null draws the one-bend Windows curve.</summary>
-    public IReadOnlyList<double>? GraphPoints => _isVirtual ? Settings.CurvePoints.ToArray() : null;
+    /// <summary>Null draws the one-bend Windows curve.</summary>
+    public IReadOnlyList<double>? GraphPoints => UsesCurvePoints ? Settings.CurvePoints.ToArray() : null;
 
     internal void SetCurvePoint(int index, double value)
     {
         value = Math.Round(CalibrationMath.Clamp(value, 0, 100));
         if (value.Equals(Settings.CurvePoints[index])) return;
-        // Replace rather than edit the list: the virtual output reads it from another thread.
         var points = Settings.CurvePoints.ToList();
         points[index] = value;
         Settings.CurvePoints = points;
@@ -284,24 +253,27 @@ public sealed class ControlViewModel : ObservableObject
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetOutputMode(bool isVirtual)
+    public void SetOutputMode(OutputMode mode)
     {
-        if (_isVirtual == isVirtual) return;
-        _isVirtual = isVirtual;
+        if (_mode == mode) return;
+        _mode = mode;
         _liveStale = true;
-        Raise(nameof(IsVirtual));
         Raise(nameof(IsWindows));
+        Raise(nameof(UsesCurvePoints));
+        Raise(nameof(OutputLabel));
+        Raise(nameof(InputLabel));
+        Raise(nameof(BottomMaximum));
+        Raise(nameof(TopMinimum));
+        Raise(nameof(TopMaximum));
         Raise(nameof(GraphPoints));
         Raise(nameof(IsApplied));
         Raise(nameof(StateText));
     }
 
-    /// <summary>Whether the virtual output currently delivers this control, with a short explanation.</summary>
-    public void SetVirtualStatus(bool ok, string text)
+    public void SetOnboardSaved(bool saved)
     {
-        if (_virtualOk == ok && _virtualStatus == text) return;
-        _virtualOk = ok;
-        _virtualStatus = text;
+        if (_onboardSaved == saved) return;
+        _onboardSaved = saved;
         Raise(nameof(IsApplied));
         Raise(nameof(StateText));
     }
@@ -316,14 +288,16 @@ public sealed class ControlViewModel : ObservableObject
 
     public AxisCalibration Computed => _computed;
 
-    /// <summary>Calibration matches what Windows currently has stored for this axis.</summary>
-    public bool IsApplied => _isVirtual
-        ? IsAssigned && Settings.VirtualAxis != 0 && _virtualOk
-        : IsAssigned && _applied.HasValue && _applied.Value == _computed;
+    /// <summary>The calibration is saved to the selected target.</summary>
+    public bool IsApplied => IsAssigned && (_mode switch
+    {
+        OutputMode.Onboard => _onboardSaved,
+        _ => _applied.HasValue && _applied.Value == _computed,
+    });
 
     public string StateText =>
         !IsAssigned ? "No axis assigned" :
-        _isVirtual ? (Settings.VirtualAxis == 0 ? "Not sent to vJoy (axis off)" : _virtualStatus) :
+        _mode == OutputMode.Onboard ? GameAxis + (_onboardSaved ? " · Profile saved on controller" : " · Profile has unsaved edits") :
         IsApplied ? "Saved in Windows" : "Not saved yet";
 
     public string ActiveRangeText
@@ -368,7 +342,7 @@ public sealed class ControlViewModel : ObservableObject
         if (raw is int r && Axis is HidAxis a)
         {
             double travel, output;
-            if (_isVirtual)
+            if (UsesCurvePoints)
             {
                 travel = CalibrationMath.Travel(r, Settings.RawRest, Settings.RawFull, Settings.BottomDeadzone, Settings.TopDeadzone);
                 output = Curve.Evaluate(Settings.CurvePoints, travel);
@@ -431,6 +405,9 @@ public sealed class ControlViewModel : ObservableObject
         DeviceTemplates.ResetTuning(Settings);
         Raise(nameof(BottomDeadzone));
         Raise(nameof(TopValue));
+        Raise(nameof(BottomMaximum));
+        Raise(nameof(TopMinimum));
+        Raise(nameof(TopMaximum));
         Raise(nameof(Midpoint));
         Raise(nameof(CurveName));
         foreach (CurvePointViewModel point in CurvePoints) point.Refresh();

@@ -18,8 +18,8 @@ public enum OutputMode
     /// <summary>Stored as the Windows calibration of the real device. Works with the app closed; one-bend curve.</summary>
     Windows,
 
-    /// <summary>Sent to a vJoy virtual controller by the running app. Full multi-point curve.</summary>
-    Virtual,
+    /// <summary>Stored and applied by OpenPedalControl firmware on the physical controller.</summary>
+    Onboard = 2,
 }
 
 /// <summary>Settings of one pedal (or handbrake lever), as stored in the profile file.</summary>
@@ -45,11 +45,8 @@ public sealed class ControlSettings
     /// <summary>Windows mode: percentage of pedal travel at which the output reaches 50 %. 50 is linear.</summary>
     [DataMember(Order = 8)] public double CurveMidpoint { get; set; } = 50;
 
-    /// <summary>Virtual mode: output in percent at 0, 20, 40, 60, 80 and 100 % of the travel.</summary>
+    /// <summary>Onboard mode: output in percent at 0, 20, 40, 60, 80 and 100 % of the travel.</summary>
     [DataMember(Order = 9)] public List<double> CurvePoints { get; set; } = Curve.Linear();
-
-    /// <summary>Virtual mode: HID usage of the vJoy axis this control drives (0x30 = X ... 0x37 = Dial); 0 = off.</summary>
-    [DataMember(Order = 10)] public int VirtualAxis { get; set; }
 
     public bool IsAssigned => UsagePage != 0;
 
@@ -82,7 +79,8 @@ public sealed class DeviceProfile
     [DataMember(Order = 6)] public string Output { get; set; } = nameof(OutputMode.Windows);
 
     public OutputMode GetOutputMode() =>
-        System.Enum.TryParse(Output, true, out OutputMode mode) ? mode : OutputMode.Windows;
+        System.Enum.TryParse(Output, true, out OutputMode mode) &&
+        (mode == OutputMode.Windows || mode == OutputMode.Onboard) ? mode : OutputMode.Windows;
 
     [OnDeserializing]
     private void OnDeserializing(StreamingContext context)
