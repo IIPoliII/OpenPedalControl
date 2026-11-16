@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>0.4.1</Version>
+    <Version>0.4.2</Version>
     <Product>OpenPedalControl</Product>
     <Description>Calibration and tuning tool for legacy sim racing pedals and handbrakes.</Description>
     <Copyright>MIT License</Copyright>
@@ -33,6 +33,8 @@
     <Resource Include="Assets\app.ico" />
     <!-- Shown in the app as "What's new". -->
     <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="CHANGELOG.md" Link="CHANGELOG.md" />
+    <EmbeddedResource Include="Firmware\Bundled\pedals.firmware.json" LogicalName="Firmware.pedals.firmware.json" />
+    <EmbeddedResource Include="Firmware\Bundled\pedals.ihx" LogicalName="Firmware.pedals.ihx" />
   </ItemGroup>
 
 </Project>

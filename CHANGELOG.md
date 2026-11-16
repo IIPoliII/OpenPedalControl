@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 - 2026-11-16
+
+- Firmware is now included in the app: no separate download, ZIP extraction or manifest selection is needed. The portable exe contains the same tested pedal firmware 1.13.0.
+- The firmware screen shows installed and included versions and avoids offering an unnecessary reinstall. Original backups are discovered and verified automatically in the existing backup folder, or can be located once and remembered.
+- One Prepare installation button handles update mode and controller checks before final confirmation. Manual files, restoration and reinstall options are under Advanced options.
+- Closing before any flash write returns a controller that this assistant put in update mode to its existing application. Failed write sessions still never restart automatically.
+
 ## 0.4.1 - 2026-11-16
 
 - Block app exit and app update installation while the firmware assistant is open. Firmware maintenance cannot start during an app update, and background device refresh stays paused until it ends.

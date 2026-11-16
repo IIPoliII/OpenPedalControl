@@ -14,7 +14,16 @@ namespace OpenPedalControl.Firmware;
 internal sealed class FirmwareDevice
 {
     public string Path = "", Product = "";
-    public ushort Vid, Pid, Usage, Page, Input, Output, Feature;
+    public ushort Vid, Pid, Usage, Page, Input, Output, Feature, VersionBcd;
+    public Version? InstalledVersion
+    {
+        get
+        {
+            if (!IsCustom) return null;
+            int a = VersionBcd >> 12, b = (VersionBcd >> 8) & 15, c = (VersionBcd >> 4) & 15, d = VersionBcd & 15;
+            return a > 9 || b > 9 || c > 9 || d > 9 ? null : new Version(a * 10 + b, c * 10 + d, 0);
+        }
+    }
     public bool IsBootloader => Vid == 0x10C4 && Pid == 0x8B02 && Page == 0xFF00 && Usage == 1 && Input == 5 && Output == 65 && Feature == 0;
     public bool IsCustom => Product == OnboardProtocol.Product &&
         ((Vid == 0x1209 && (Pid == 1 || Pid == 2)) || (Vid == 0x10C4 && Pid == 0x8B02)) &&
@@ -66,7 +75,7 @@ internal sealed class FirmwareUsb : IFirmwareTransport
             var text = new byte[512];
             string product = HidNative.HidD_GetProductString(h, text, text.Length) ? Encoding.Unicode.GetString(text).TrimEnd('\0') : "";
             return new FirmwareDevice { Path = path, Product = product, Vid = a.VendorID, Pid = a.ProductID,
-                Usage = caps[0], Page = caps[1], Input = caps[2], Output = caps[3], Feature = caps[4] };
+                Usage = caps[0], Page = caps[1], Input = caps[2], Output = caps[3], Feature = caps[4], VersionBcd = a.VersionNumber };
         }
         finally { HidNative.HidD_FreePreparsedData(p); }
     }

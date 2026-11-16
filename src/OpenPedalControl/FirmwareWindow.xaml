@@ -1,7 +1,7 @@
 <Window x:Class="OpenPedalControl.FirmwareWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Pedal firmware" Width="720" Height="720" MinHeight="580" MinWidth="640"
+        Title="Pedal firmware" Width="640" Height="540" MinHeight="480" MinWidth="600"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" FontSize="13"
         Background="{StaticResource WindowBackground}" Foreground="{StaticResource TextPrimary}">
     <DockPanel Background="{StaticResource WindowBackground}">
@@ -9,49 +9,57 @@
             <Button Content="Close" x:Name="CloseButton" Click="OnClose" HorizontalAlignment="Right" Style="{StaticResource SecondaryButton}" MinWidth="100"/>
         </Border>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="20">
-                <TextBlock Text="Pedal firmware over USB" FontSize="20" FontWeight="SemiBold"/>
-                <TextBlock TextWrapping="Wrap" Margin="0,8,0,14" Style="{StaticResource Muted}"
-                           Text="Experimental support for the verified HE SIM PEDALS EFM8 bench board only. The PIC handbrake is not supported. Disconnect other pedal boards. A damaged bootloader still requires C2 recovery."/>
+            <StackPanel Margin="24,20">
+                <TextBlock Text="Pedal firmware" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock Text="The firmware is included with OpenPedalControl. No download or file selection needed."
+                           TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,8,0,18"/>
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Text="1 · CHOOSE AND VERIFY FILES" Style="{StaticResource SectionTitle}"/>
-                        <CheckBox x:Name="RestoreOriginal" Content="Restore the original application and settings from my backup" Margin="0,12,0,8" Checked="OnFilesChanged" Unchecked="OnFilesChanged"/>
-                        <TextBlock Text="Firmware bundle (pedals.firmware.json)" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                        <DockPanel x:Name="BundlePanel">
-                            <Button DockPanel.Dock="Right" Content="Browse…" Click="OnBrowseBundle" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
-                            <TextBox x:Name="BundlePath" Height="30" VerticalContentAlignment="Center" TextChanged="OnFilesChanged" AutomationProperties.Name="Firmware bundle manifest" ToolTip="Select pedals.firmware.json produced by the firmware build, next to its HEX image."/>
-                        </DockPanel>
-                        <TextBlock Text="Original backup folder" Style="{StaticResource Muted}" Margin="0,10,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="OpenPedalControl Pedals" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="InstalledText" Margin="0,8,0,0" Text="Checking connected pedals…"/>
+                                <TextBlock x:Name="IncludedText" Margin="0,4,0,0" Style="{StaticResource Muted}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Refresh" x:Name="RefreshButton" Click="OnRefresh" VerticalAlignment="Top" Style="{StaticResource QuietButton}"/>
+                        </Grid>
+                        <Separator Margin="0,14" Background="{StaticResource CardBorder}"/>
                         <DockPanel>
-                            <Button DockPanel.Dock="Right" x:Name="BackupBrowseButton" Content="Browse…" Click="OnBrowseBackup" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
-                            <TextBox x:Name="BackupPath" Height="30" VerticalContentAlignment="Center" TextChanged="OnFilesChanged" AutomationProperties.Name="Original backup folder"/>
+                            <Button DockPanel.Dock="Right" x:Name="LocateBackupButton" Content="Locate backup…" Click="OnBrowseBackup" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0"/>
+                            <TextBlock x:Name="BackupText" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         </DockPanel>
-                        <Button Content="Verify files" x:Name="FilesButton" Click="OnVerifyFiles" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Margin="0,12,0,8"/>
-                        <TextBlock x:Name="Review" TextWrapping="Wrap" Text="Select a firmware bundle and the folder containing your two original BIN backups. Nothing is written to the controller when verifying files."/>
                     </StackPanel>
                 </Border>
-                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
-                    <StackPanel>
-                        <TextBlock Text="2 · CHECK THE CONTROLLER" Style="{StaticResource SectionTitle}"/>
-                        <TextBlock TextWrapping="Wrap" Margin="0,8" Text="Original firmware: hold FW/reset while reconnecting USB, then release. Our firmware can enter update mode with the button below. Checking identifies the chip and compares the preserved bootloader and protection pages with your backup; it does not erase or program flash."/>
-                        <WrapPanel>
+                <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,16,0,12" FontSize="14"/>
+                <ProgressBar x:Name="Progress" Height="6" Minimum="0" Maximum="100" Margin="0,0,0,12" Visibility="Collapsed"/>
+                <Button Content="Prepare installation" x:Name="PrepareButton" Click="OnPrepare" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/>
+                <Button Content="Install firmware…" x:Name="InstallButton" Click="OnInstall" IsEnabled="False" Visibility="Collapsed" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/>
+                <TextBlock Text="For the supported HE SIM PEDALS controller. The handbrake is not supported."
+                           Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                <Expander x:Name="Advanced" Header="Advanced options" Margin="0,18,0,0">
+                    <StackPanel Margin="0,12,0,0">
+                        <CheckBox x:Name="ForceReinstall" Content="Reinstall even if this version is already installed" Checked="OnFilesChanged" Unchecked="OnFilesChanged"/>
+                        <CheckBox x:Name="RestoreOriginal" Content="Restore original firmware and settings from my backup" Margin="0,10,0,0" Checked="OnFilesChanged" Unchecked="OnFilesChanged"/>
+                        <CheckBox x:Name="UseExternal" Content="Use a different firmware bundle" Margin="0,10,0,8" Checked="OnFilesChanged" Unchecked="OnFilesChanged"/>
+                        <DockPanel x:Name="BundlePanel">
+                            <Button DockPanel.Dock="Right" Content="Browse…" Click="OnBrowseBundle" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
+                            <TextBox x:Name="BundlePath" Height="30" VerticalContentAlignment="Center" TextChanged="OnFilesChanged" AutomationProperties.Name="External firmware bundle"/>
+                        </DockPanel>
+                        <TextBlock Text="Original backup folder" Style="{StaticResource Muted}" Margin="0,12,0,4"/>
+                        <TextBox x:Name="BackupPath" Height="30" VerticalContentAlignment="Center" TextChanged="OnFilesChanged" AutomationProperties.Name="Original backup folder"/>
+                        <Button Content="Verify selected files" x:Name="FilesButton" Click="OnVerifyFiles" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Margin="0,10"/>
+                        <TextBlock x:Name="Review" TextWrapping="Wrap" Style="{StaticResource Muted}"/>
+                        <WrapPanel Margin="0,12,0,0">
                             <Button Content="Enter update mode" x:Name="BootButton" Click="OnEnterBoot" Style="{StaticResource SecondaryButton}"/>
                             <Button Content="Check controller" x:Name="CheckButton" Click="OnCheck" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/>
                             <Button Content="Restart controller" x:Name="RestartButton" Click="OnRestart" Style="{StaticResource QuietButton}" Margin="8,0,0,0"/>
                         </WrapPanel>
+                        <TextBlock Text="Experimental firmware: 3 load-cell inputs; extra axes and buttons are not implemented. The original bootloader is preserved. A damaged bootloader still needs C2 recovery."
+                                   TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,12,0,0"/>
+                        <TextBlock x:Name="LogPath" TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
                     </StackPanel>
-                </Border>
-                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
-                    <StackPanel>
-                        <TextBlock Text="3 · REVIEW AND INSTALL" Style="{StaticResource SectionTitle}"/>
-                        <TextBlock TextWrapping="Wrap" Margin="0,8" Text="Writes the application only, preserving the bootloader and protection pages. A custom update keeps the existing profile. Restoring the original also replaces its user settings. Keep USB connected until verification finishes."/>
-                        <ProgressBar x:Name="Progress" Height="8" Minimum="0" Maximum="100" Margin="0,0,0,10"/>
-                        <Button Content="Install verified firmware…" x:Name="InstallButton" Click="OnInstall" IsEnabled="False" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"/>
-                    </StackPanel>
-                </Border>
-                <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,14,0,0" Text="No firmware operation started."/>
-                <TextBlock x:Name="LogPath" TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,6,0,0"/>
+                </Expander>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

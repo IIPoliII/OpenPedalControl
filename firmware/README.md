@@ -22,30 +22,34 @@ differences, including the four auxiliary axes and twelve button inputs that are
 
 ## Desktop USB firmware assistant
 
-Available in OpenPedalControl 0.4.0 and later, through **Settings → Pedal firmware…**. It uses
+Available through **Settings → Pedal firmware…**. Since 0.4.2 the firmware is included in the app;
+there is no separate download or file selection in the normal workflow. The assistant uses
 Windows HID directly; Python and a C2 adapter are not needed for this USB workflow. It currently
 requires the verified bench-board backup. Other boards and the PIC handbrake are rejected.
 
-1. Save or discard any pending edits before opening the assistant. Device monitoring pauses during maintenance.
-2. Extract the firmware bundle ZIP into a folder. Select `pedals.firmware.json`, next to `pedals.ihx`.
-   The build below creates these two files. Select the original backup folder containing
-   `program-0000-3fff.bin` and `nonvolatile-f800-fbff.bin`. Both hashes must match the verified backup.
-3. Click **Verify files**. Check the version, target, hash and declared specifications. The app checks
-   the HEX checksum, application address range, reset vector, manifest target and profile compatibility.
-   A manifest is build metadata, not a digital signature or proof that an arbitrary image is trustworthy.
-4. Original firmware: hold FW/reset while reconnecting USB, then release. With our firmware,
-   **Enter update mode** requests the preserved bootloader in software.
-5. Click **Check controller**. This checks chip ID `0x3241`, bootloader version `0x90`, and CRCs of the
-   bootloader and protection pages against the backup. It sets protocol RAM state but sends no erase,
-   program or lock command.
-6. **Install verified firmware…** shows a final confirmation for the exact reviewed image. Keep USB
-   connected. All 29 application pages are replaced; the reset-vector first byte is activated last.
-   Image and protected-region CRCs must pass before the assistant requests a restart. Custom updates
-   preserve user-data pages and therefore the saved profile when using profile version 1.
-7. Close the assistant after completion, check each pedal in the app and `joy.cpl`, then calibrate/save
-   as needed. A firmware version change does not itself measure correct sensor endpoints.
+1. Open the assistant. It shows the **installed** and **included** firmware versions. If it says
+   **Already installed**, you can close it: the firmware is already on your pedals.
+2. The original backup is found and hash-verified automatically under
+   `Documents/OpenPedalControl-backups/pedalier/<unit>/<date>`, or in a previously chosen folder.
+   If needed, click **Locate backup…** once. Original firmware is never included in the app or uploaded.
+3. When an installation is needed, click **Prepare installation**. Our firmware enters update mode
+   automatically, and the assistant checks the chip and preserved-region CRCs. With original firmware,
+   follow the request to hold FW/reset while reconnecting USB, then click **Continue**.
+4. Click **Install firmware…**, review the version and confirm. Keep USB connected until completion.
+   Custom updates preserve the saved calibration and curves. Closing before any write returns a
+   controller that the assistant put into update mode to its existing application.
+5. Close the assistant after completion and check the pedals. Calibrate/save if the wiring or sensors changed.
 
-**Restore original:** select the restoration checkbox and your backup folder. The app builds the
+**Advanced options** holds external firmware files, explicit reinstallation, original restoration,
+technical details and manual controller checks. Developers can select `pedals.firmware.json` next to
+`pedals.ihx` there; ordinary users use the included firmware. The manifest is build metadata, not a
+digital signature or proof that an arbitrary external image is trustworthy.
+
+All 29 application pages are replaced during installation; the reset-vector first byte is activated last.
+Image and protected-region CRCs must pass before restart. Chip ID `0x3241`, bootloader version
+`0x90`, image integrity, address limits and profile compatibility checks remain required.
+
+**Restore original:** expand **Advanced options** and select the restoration checkbox. The app builds the
 restoration plan from the verified backup in memory, replacing the original application and all fourteen
 user-data pages at `0xF800–0xFB7F`. It preserves the bootloader and protection pages. Actual restoration
 writing remains untested on hardware; it is covered by the simulated flash tests.
@@ -58,6 +62,8 @@ assistant cannot repair an erased/damaged bootloader; that still needs a C2 prog
 The native assistant's software boot entry, read-only full-image/protected-region verification, restart and
 unchanged saved calibration were checked on the real board. Its write engine has passed simulation,
 including disconnects before and after every command. A real write through this new UI is still pending.
+Automatic preparation and cancellation back to normal mode were also checked on the board with zero
+erase/program commands and unchanged calibration.
 
 ## Building for a board
 

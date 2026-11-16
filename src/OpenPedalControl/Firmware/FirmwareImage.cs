@@ -52,6 +52,31 @@ public sealed class FirmwareImage
         var info = new FileInfo(manifestPath);
         if (info.Length > 16384) throw new InvalidDataException("Firmware manifest is too large.");
         using var stream = File.OpenRead(manifestPath);
+        return LoadManifest(stream, name =>
+        {
+            string path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(manifestPath))!, name);
+            if (new FileInfo(path).Length > 256000) throw new InvalidDataException("Firmware image is too large.");
+            return File.ReadAllBytes(path);
+        });
+    }
+
+    public static FirmwareImage LoadBundled()
+    {
+        var assembly = typeof(FirmwareImage).Assembly;
+        using var manifest = assembly.GetManifestResourceStream("Firmware.pedals.firmware.json")
+            ?? throw new InvalidDataException("The included firmware is unavailable. Reinstall OpenPedalControl.");
+        return LoadManifest(manifest, name =>
+        {
+            using var stream = assembly.GetManifestResourceStream("Firmware." + name)
+                ?? throw new InvalidDataException("The included firmware image is unavailable.");
+            using var bytes = new MemoryStream();
+            stream.CopyTo(bytes);
+            return bytes.ToArray();
+        });
+    }
+
+    private static FirmwareImage LoadManifest(Stream stream, Func<string, byte[]> readImage)
+    {
         var m = new DataContractJsonSerializer(typeof(Manifest)).ReadObject(stream) as Manifest;
         if (m == null || m.Schema != 1 || m.TargetName != Target || m.ProfileVersion != 1 ||
             m.AdcBits != 12 || m.Interval != 4 || m.Axes != 3 || (m.CpuHz != 24500000 && m.CpuHz != 48000000) ||
@@ -60,9 +85,7 @@ public sealed class FirmwareImage
         if (string.IsNullOrWhiteSpace(m.Image) || m.Image != Path.GetFileName(m.Image) ||
             m.Image.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             throw new InvalidDataException("The firmware image must be next to its manifest.");
-        string path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(manifestPath))!, m.Image);
-        if (new FileInfo(path).Length > 256000) throw new InvalidDataException("Firmware image is too large.");
-        byte[] raw = File.ReadAllBytes(path);
+        byte[] raw = readImage(m.Image);
         string hash = Hash(raw);
         if (!string.Equals(hash, m.Hash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Firmware checksum does not match its manifest.");

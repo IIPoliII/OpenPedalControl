@@ -1,3 +1,6 @@
 * text=auto
 *.ico binary
 *.png binary
+
+# The embedded firmware checksum covers the exact Intel HEX file bytes.
+src/OpenPedalControl/Firmware/Bundled/*.ihx -text whitespace=cr-at-eol

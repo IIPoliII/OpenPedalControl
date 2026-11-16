@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "target": "HE_SIM_PEDALS_EFM8UB10F16G_QFN28",
+  "version": "1.13.0",
+  "image": "pedals.ihx",
+  "sha256": "ed64c2201542dcb76b32ef1c8ffcacd7fba81ffdd41994162e6b268f43a2c226",
+  "profile_version": 1,
+  "adc_bits": 12,
+  "usb_interval_ms": 4,
+  "axes": 3,
+  "cpu_hz": 24500000,
+  "vid": 4617,
+  "pid": 2,
+  "adc_mux": [
+    14,
+    13,
+    12
+  ],
+  "source_sha256": "d55d8c79ba51d6c2d406a52ea2f39f70369ff9aee593fd539f353ca580011d0f"
+}
