@@ -52,7 +52,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshCommand = new RelayCommand(() => RefreshDevices(true));
         OpenGameControllersCommand = new RelayCommand(() => Open("control.exe", "joy.cpl"));
         CheckUpdatesCommand = new RelayCommand(() => _ = CheckForUpdatesAsync(true), () => !_updateBusy);
-        InstallUpdateCommand = new RelayCommand(() => _ = InstallUpdateAsync(), () => _update != null && !_updateBusy);
+        InstallUpdateCommand = new RelayCommand(() => _ = InstallUpdateAsync(), () => _update != null && !_updateBusy && !_firmwareMaintenance);
     }
 
     // --- Settings window ----------------------------------------------------------------------------
@@ -75,6 +75,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string CurrentVersionText => "Installed: " + Version + (Updater.IsInstalled ? "" : " (portable)");
     public string UpdateStatus { get => _updateStatus; private set => Set(ref _updateStatus, value); }
     public bool UpdateAvailable => _update != null;
+    public bool CanMaintainFirmware => !_updateBusy && !_firmwareMaintenance;
+    public bool IsFirmwareMaintenance => _firmwareMaintenance;
     public string UpdateBannerText => _update == null ? "" : $"OpenPedalControl {_update.Version} is available.";
 
     private void SaveSettings()
@@ -130,7 +132,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async System.Threading.Tasks.Task InstallUpdateAsync()
     {
-        if (_update == null) return;
+        if (_update == null || _firmwareMaintenance) return;
         SetUpdateBusy(true);
         UpdateStatus = $"Downloading version {_update.Version}…";
         try
@@ -163,6 +165,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void SetUpdateBusy(bool busy)
     {
         _updateBusy = busy;
+        Raise(nameof(CanMaintainFirmware));
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
     }
 
@@ -459,16 +462,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         foreach (ControlViewModel control in Controls) control.UpdateLive();
     }
 
-    public void BeginFirmwareMaintenance()
+    public bool BeginFirmwareMaintenance()
     {
+        if (!CanMaintainFirmware) return false;
         _firmwareMaintenance = true;
+        Raise(nameof(CanMaintainFirmware));
         CloseDevice();
         NotifyDeviceChanged();
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        return true;
     }
 
     public void EndFirmwareMaintenance()
     {
         _firmwareMaintenance = false;
+        Raise(nameof(CanMaintainFirmware));
         RefreshDevices(true);
     }
 

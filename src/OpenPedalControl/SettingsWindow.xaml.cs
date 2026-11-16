@@ -24,7 +24,7 @@ public partial class SettingsWindow : Window
     private void OnFirmwareClick(object sender, RoutedEventArgs e)
     {
         if (!_prepareFirmware(this)) return;
-        _viewModel.BeginFirmwareMaintenance();
+        if (!_viewModel.BeginFirmwareMaintenance()) return;
         try { new FirmwareWindow { Owner = this }.ShowDialog(); }
         finally { _viewModel.EndFirmwareMaintenance(); }
     }

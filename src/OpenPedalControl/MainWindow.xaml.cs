@@ -153,6 +153,11 @@ public partial class MainWindow : Window
 
     private void ExitApp()
     {
+        if (_viewModel.IsFirmwareMaintenance)
+        {
+            _tray?.ShowMessage("Firmware assistant is open", "Finish or close the firmware assistant before exiting OpenPedalControl.");
+            return;
+        }
         if (!ResolveUnsaved())
         {
             ShowFromTray();
@@ -164,6 +169,11 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (_viewModel.IsFirmwareMaintenance)
+        {
+            e.Cancel = true;
+            return;
+        }
         if (!_exiting)
         {
             if (!ResolveUnsaved())

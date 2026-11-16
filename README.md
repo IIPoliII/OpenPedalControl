@@ -101,7 +101,7 @@ The app is built in `src/OpenPedalControl/bin/Release/net48/`. The installer add
 [Inno Setup 6](https://jrsoftware.org/isinfo.php):
 
 ```powershell
-./installer/build-installer.ps1 -Version 0.4.0
+./installer/build-installer.ps1 -Version 0.4.1
 ```
 
 Pushing a version tag makes GitHub Actions build, test and publish the app. Add the release to

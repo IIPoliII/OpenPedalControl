@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 - 2026-11-16
+
+- Block app exit and app update installation while the firmware assistant is open. Firmware maintenance cannot start during an app update, and background device refresh stays paused until it ends.
+- This stable USB-assistant release includes the 0.4.0 changes below. The preliminary 0.4.0 build is superseded by this release with additional interruption guards.
+
 ## 0.4.0 - 2026-11-16
 
 - Settings now includes a USB pedal firmware assistant: select a versioned firmware bundle and the verified original backup, check the controller, then review and explicitly confirm installation. No Python or external programmer is needed.

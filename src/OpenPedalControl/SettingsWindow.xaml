@@ -27,7 +27,7 @@
                 <StackPanel>
                     <TextBlock Text="PEDAL FIRMWARE" Style="{StaticResource SectionTitle}"/>
                     <TextBlock Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8" Text="Install, update or restore the supported EFM8 pedal firmware over USB. Requires the verified original backup. The PIC handbrake is not supported."/>
-                    <Button Content="Pedal firmware…" Click="OnFirmwareClick" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}"/>
+                    <Button Content="Pedal firmware…" Click="OnFirmwareClick" IsEnabled="{Binding CanMaintainFirmware}" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}"/>
                 </StackPanel>
             </Border>
 
